@@ -35,11 +35,10 @@ class Privilege final : public GarbageCollectedFinalized<Privilege>,
   static Privilege* CreateForJSConstructor();
   bool equals(Privilege*) const;
   bool subsumes(Privilege*) const;
-  Privilege* combine(Privilege*);
-  Privilege* delegate(Label*, ExceptionState&);
-  bool isEmpty() const { return label_->isEmpty(); }
-  Label* asLabel() const { return label_->clone(); }
-  Privilege* clone() const { return new Privilege(label_); }
+  Privilege* combine(Privilege*) const;
+  Privilege* delegate(Label*, ExceptionState&) const;
+  bool isEmpty() const;
+  Label* asLabel() const;
   String toString() const;
 
   DEFINE_INLINE_TRACE() { visitor->Trace(label_); }
@@ -47,7 +46,6 @@ class Privilege final : public GarbageCollectedFinalized<Privilege>,
  private:
   Privilege() { label_ = Label::Create(); }
   explicit Privilege(Label* label) : label_(label) {}
-  Label* DirectLabel() { return label_; }
   Member<Label> label_;
 };
 

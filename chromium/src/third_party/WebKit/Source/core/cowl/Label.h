@@ -64,19 +64,20 @@ class Label final : public GarbageCollectedFinalized<Label>,
 
  public:
   static Label* Create() { return new Label; }
-  static Label* Create(const String& principal);
+  static Label* Create (const String& principal);
   bool equals(Label*) const;
   bool subsumes(Label*) const;
-  Label* And(const String& principal);
-  Label* And(Label*);
-  Label* Or(const String& principal);
-  Label* Or(Label*);
+  Label* and_(const String& principal) const;
+  Label* and_(Label*) const;
+  Label* or_(const String& principal) const;
+  Label* or_(Label*) const;
   bool isEmpty() const { return !roles_.size(); }
-  Label* clone() { return new Label(roles_); }
+  Label* clone() const { return new Label(roles_); }
   String toString() const;
 
+  // Helper functions
   void InternalAnd(DisjunctionSet&, bool clone = false);
-  void _Or(DisjunctionSet&);
+  void InternalOr(DisjunctionSet&);
   bool Contains(DisjunctionSet&) const;
   void RemoveRolesSubsumedBy(DisjunctionSet&);
 
@@ -87,7 +88,7 @@ class Label final : public GarbageCollectedFinalized<Label>,
 
  private:
   Label() {}
-  explicit Label(DisjunctionSetArray& roles) : roles_(roles) {}
+  explicit Label(const DisjunctionSetArray& roles) : roles_(roles) {}
   DisjunctionSetArray roles_;
 };
 

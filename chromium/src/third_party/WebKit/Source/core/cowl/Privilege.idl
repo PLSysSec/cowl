@@ -50,10 +50,5 @@
    */
   readonly attribute Label asLabel;
 
-  /**
-   * Make a new copy of this privilege.
-   */
-  Privilege clone();
-
   stringifier;
 };

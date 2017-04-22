@@ -74,7 +74,7 @@ namespace blink {
     return true;
   }
 
-  Label* Label::And(const String& principal) {
+  Label* Label::and_(const String& principal) const {
     COWLPrincipal new_principal = COWLPrincipal(
         principal,
         COWLPrincipalType::kOriginPrincipal);
@@ -85,7 +85,7 @@ namespace blink {
     return _this;
   }
 
-  Label* Label::And(Label* label) {
+  Label* Label::and_(Label* label) const {
     Label* _this = clone();
 
     DisjunctionSetArray* other_roles = label->GetDirectRoles();
@@ -95,7 +95,7 @@ namespace blink {
     return _this;
   }
 
-  Label* Label::Or(const String& principal) {
+  Label* Label::or_(const String& principal) const {
     if (isEmpty())
       return nullptr;
 
@@ -106,17 +106,17 @@ namespace blink {
         COWLPrincipalType::kOriginPrincipal);
     DisjunctionSet new_dset = DisjunctionSetUtils::ConstructDset(new_principal);
 
-    _this->_Or(new_dset);
+    _this->InternalOr(new_dset);
 
     return _this;
   }
 
-  Label* Label::Or(Label* label) {
+  Label* Label::or_(Label* label) const {
     Label* _this = clone();
 
     DisjunctionSetArray* other_roles = label->GetDirectRoles();
     for (unsigned i = 0; i < other_roles->size(); ++i) {
-      _this->_Or(other_roles->at(i));
+      _this->InternalOr(other_roles->at(i));
     }
     return _this;
   }
@@ -163,7 +163,7 @@ namespace blink {
     }
   }
 
-  void Label::_Or(DisjunctionSet& role) {
+  void Label::InternalOr(DisjunctionSet& role) {
     if (isEmpty())
       return;
 

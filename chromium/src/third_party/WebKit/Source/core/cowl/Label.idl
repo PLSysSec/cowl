@@ -43,14 +43,14 @@
   /**
    * Add role to this label and return the label.
    */
-  Label And(DOMString principal);
-  Label And(Label other);
+  [ImplementedAs=and_] Label and(DOMString principal);
+  [ImplementedAs=and_] Label and(Label other);
 
   /**
    * Add the principals in the role to all the label roles.
    */
-  Label Or(DOMString principal);
-  Label Or(Label other);
+  [ImplementedAs=or_] Label _or(DOMString principal);
+  [ImplementedAs=or_] Label _or(Label other);
 
   /**
    * Is this label empty?

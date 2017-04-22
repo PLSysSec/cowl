@@ -27,26 +27,33 @@ namespace blink {
     return new Privilege(label);
   }
 
-  bool Privilege::equals (Privilege* other) const {
-    return label_->equals(other->DirectLabel());
+  bool Privilege::equals(Privilege* other) const {
+    return label_->equals(other->label_);
   }
 
-  bool Privilege::subsumes (Privilege* other) const {
-    return label_->subsumes(other->DirectLabel());
+  bool Privilege::subsumes(Privilege* other) const {
+    return label_->subsumes(other->label_);
   }
 
-  Privilege* Privilege::combine(Privilege* other) {
-    label_->And(other->DirectLabel());
-    Privilege* this_ = this;
-    return this_;
+  Privilege* Privilege::combine(Privilege* other) const {
+    Label* new_label = label_->and_(other->label_);
+    return new Privilege(new_label);
   }
 
-  Privilege* Privilege::delegate(Label* label, ExceptionState& exception_state) {
+  Privilege* Privilege::delegate(Label* label, ExceptionState& exception_state) const {
     if (!label_->subsumes(label)) {
       exception_state.ThrowSecurityError("SecurityError: Earlier privilege does not subsume label.");
       return nullptr;
     }
     return new Privilege(label);
+  }
+
+  bool Privilege::isEmpty() const {
+    return label_->isEmpty();
+  }
+
+  Label* Privilege::asLabel() const {
+    return label_->clone();
   }
 
   String Privilege::toString() const {
