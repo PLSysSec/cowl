@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<script src="../resources/testharness.js"></script>
+<script src="../resources/testharnessreport.js"></script>
+<script>
+'use strict';
+
+function test_cowl_labels() {
+
+  const empty = new Label();
+  const a = new Label("https://a.com");
+  const b = new Label("https://b.com");
+  const aANDb = new Label("https://a.com").and("https://b.com");
+  const aORb = new Label("https://a.com").or("https://b.com");
+  const aORbANDc = aORb.and(new Label("https://c.com"));
+
+  test(() => {
+      assert_true(a.equals(a));
+      assert_false(a.equals(empty));
+
+      assert_false(aANDb.equals(a));
+      assert_false(aORb.equals(a));
+      }, 'Label equals()');
+
+  test(() => {
+      assert_true(a.subsumes(empty), 'a.com data is more sensitive/trustworthy than public data');
+      assert_true(b.subsumes(empty), 'b.com data is more sensitive/trustworthy than public data');
+
+      assert_true(aANDb.subsumes(a), 'a.com and b.com data is more sensitive/trustworthy than a.com data');
+      assert_true(aANDb.subsumes(b), 'a.com and b.com data is more sensitive/trustworthy than b.com data');
+
+      assert_false(a.subsumes(b), 'a.com data not comparable to b.com data');
+      assert_false(b.subsumes(a), 'b.com data not comparable to a.com data');
+
+      assert_true(a.subsumes(aORb), 'a.com data is more sensitive/trustworthy than a.com or b.com data');
+      assert_true(b.subsumes(aORb), 'b.com data is more sensitive/trustworthy than a.com or b.com data');
+      }, 'Label subsumes()');
+
+  test(() => {
+      assert_true(aANDb.equals(a.and(b)));
+
+      const a2 = a.and(aORb)
+      assert_true(a2.equals(a), 'and() returns a2 in normal form which is equivalent to a');
+      assert_equals(a2.toString(), "https://a.com");
+      }, 'Label and()');
+
+  test(() => {
+      assert_true(aORb.equals(a.or(b)));
+      assert_true(aORb.equals(b.or(a)), 'or() maintains sorted principals');
+      }, 'Label or()');
+
+  test(() => {
+      assert_equals(empty.toString(), "'none'");
+      assert_equals(a.toString(), "https://a.com");
+      assert_equals(aANDb.toString(), "(https://a.com) AND (https://b.com)");
+      assert_equals(aORb.toString(), "https://a.com OR https://b.com");
+      assert_equals(aORbANDc.toString(), "(https://a.com OR https://b.com) AND (https://c.com)");
+      }, 'Label toString()');
+}
+test_cowl_labels();
+
+</script>
