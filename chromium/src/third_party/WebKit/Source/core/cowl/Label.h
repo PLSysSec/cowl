@@ -22,38 +22,9 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "platform/wtf/Forward.h"
+#include "core/cowl/COWLPrincipal.h"
 
 namespace blink {
-
-enum class COWLPrincipalType {
-  kAppPrincipal,
-  kUniquePrincipal,
-  kOriginPrincipal,
-  kInvalidPrincipal,
-};
-
-class COWLPrincipal final {
- public:
-  COWLPrincipal(const String& principal, const COWLPrincipalType principal_type)
-    : principal_(principal), principal_type_(principal_type) {}
-
-  bool IsOriginPrincipal() const {
-    return principal_type_ == COWLPrincipalType::kOriginPrincipal;
-  }
-  String ToString() const {
-    return principal_;
-  }
-  bool operator== (const COWLPrincipal& other) const {
-    return principal_ == other.principal_;
-  }
-  bool operator< (const COWLPrincipal& other) const {
-    return CodePointCompareLessThan(principal_, other.principal_);
-  }
-
- private:
-  String principal_;
-  COWLPrincipalType principal_type_;
-};
 
 typedef Vector<COWLPrincipal> DisjunctionSet;
 typedef Vector<DisjunctionSet> DisjunctionSetArray;
