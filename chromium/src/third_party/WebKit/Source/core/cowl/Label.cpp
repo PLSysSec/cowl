@@ -134,14 +134,14 @@ namespace blink {
 
     for (size_t i = 0; i < roles_length; i++) {
       String role = DisjunctionSetUtils::ToString(roles_[i]);
-      retval.Append(role);
+      retval.append(role);
       if (i != (roles_.size() -1))
-        retval.Append(") AND (");
+        retval.append(") AND (");
     }
     if (roles_length > 1)
-      retval.Append(")");
+      retval.append(")");
     else
-      retval.Append("");
+      retval.append("");
 
     return retval;
   }
@@ -178,7 +178,7 @@ namespace blink {
 
       tmp_label.InternalAnd(n_role);
     }
-    roles_.Swap(*(tmp_label.GetDirectRoles()));
+    roles_.swap(*(tmp_label.GetDirectRoles()));
   }
 
   bool Label::Contains(DisjunctionSet& role) const {
@@ -197,7 +197,7 @@ namespace blink {
     auto new_last = std::remove_if(roles_.begin(), roles_.end(), pred);
     DisjunctionSetArray new_roles;
     std::copy(roles_.begin(), new_last, std::back_inserter(new_roles));
-    roles_.Swap(new_roles);
+    roles_.swap(new_roles);
   }
 
   // Util functions
@@ -290,12 +290,12 @@ namespace blink {
     String retval = "";
     for (size_t i = 0; i < dset.size(); ++i) {
       const COWLPrincipal& principal = dset[i];
-      retval.Append(principal.ToString());
+      retval.append(principal.ToString());
 
       if (i != (dset.size() - 1))
-        retval.Append(" OR ");
+        retval.append(" OR ");
     }
-    retval.Append("");
+    retval.append("");
     return retval;
   }
 

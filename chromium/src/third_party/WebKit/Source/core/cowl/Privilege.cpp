@@ -22,7 +22,7 @@ namespace blink {
 
   Privilege* Privilege::CreateForJSConstructor() {
     String uuid = "unique:";
-    uuid.Append(CreateCanonicalUUIDString());
+    uuid.append(CreateCanonicalUUIDString());
     Label* label = Label::Create(uuid);
     return new Privilege(label);
   }
@@ -58,8 +58,8 @@ namespace blink {
 
   String Privilege::toString() const {
     String retval = "Privilege(";
-    retval.Append(label_->toString());
-    retval.Append(")");
+    retval.append(label_->toString());
+    retval.append(")");
     return retval;
   }
 

@@ -18,9 +18,9 @@
 #ifndef Privilege_h
 #define Privilege_h
 
-#include "platform/heap/Handle.h"
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 #include "core/cowl/Label.h"
 
