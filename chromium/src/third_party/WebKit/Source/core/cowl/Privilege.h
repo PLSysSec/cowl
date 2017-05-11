@@ -22,16 +22,17 @@
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
-#include "core/cowl/Label.h"
 
 namespace blink {
+
+class Label;
 
 class Privilege final : public GarbageCollectedFinalized<Privilege>,
                         public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static Privilege* Create() { return new Privilege; }
+  static Privilege* Create();
   static Privilege* CreateForJSConstructor();
   bool equals(Privilege*) const;
   bool subsumes(Privilege*) const;
@@ -41,11 +42,11 @@ class Privilege final : public GarbageCollectedFinalized<Privilege>,
   Label* asLabel() const;
   String toString() const;
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(label_); }
+  DECLARE_TRACE();
 
  private:
-  Privilege() { label_ = Label::Create(); }
-  explicit Privilege(Label* label) : label_(label) {}
+  Privilege();
+  explicit Privilege(Label*);
   Member<Label> label_;
 };
 

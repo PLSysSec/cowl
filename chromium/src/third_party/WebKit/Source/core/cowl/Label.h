@@ -26,6 +26,8 @@
 
 namespace blink {
 
+class Privilege;
+
 typedef Vector<COWLPrincipal> DisjunctionSet;
 typedef Vector<DisjunctionSet> DisjunctionSetArray;
 
@@ -34,16 +36,17 @@ class Label final : public GarbageCollectedFinalized<Label>,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static Label* Create() { return new Label; }
+  static Label* Create();
   static Label* Create (const String& principal);
   bool equals(Label*) const;
   bool subsumes(Label*) const;
+  bool subsumes(Label*, Privilege*) const;
   Label* and_(const String& principal) const;
   Label* and_(Label*) const;
   Label* or_(const String& principal) const;
   Label* or_(Label*) const;
-  bool isEmpty() const { return !roles_.size(); }
-  Label* clone() const { return new Label(roles_); }
+  bool isEmpty() const;
+  Label* clone() const;
   String toString() const;
 
   // Helper functions
@@ -58,8 +61,8 @@ class Label final : public GarbageCollectedFinalized<Label>,
   DisjunctionSetArray* GetDirectRoles() { return &roles_; }
 
  private:
-  Label() {}
-  explicit Label(const DisjunctionSetArray& roles) : roles_(roles) {}
+  Label();
+  explicit Label(const DisjunctionSetArray& roles);
   DisjunctionSetArray roles_;
 };
 

@@ -38,7 +38,7 @@
    *
    * Thus a label always subsumes itself.
    */
-  boolean subsumes(Label other);
+  boolean subsumes(Label other, optional Privilege priv);
 
   /**
    * Add role to this label and return the label.

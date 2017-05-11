@@ -15,10 +15,16 @@
  *  Boston, MA 02110-1301 USA
  */
 
-#include "platform/UUID.h"
 #include "core/cowl/Privilege.h"
 
+#include "platform/UUID.h"
+#include "core/cowl/Label.h"
+
 namespace blink {
+
+  Privilege* Privilege::Create() {
+    return new Privilege();
+  }
 
   Privilege* Privilege::CreateForJSConstructor() {
     String uuid = "unique:";
@@ -26,6 +32,12 @@ namespace blink {
     Label* label = Label::Create(uuid);
     return new Privilege(label);
   }
+
+  Privilege::Privilege() {
+    label_ = Label::Create();
+  }
+
+  Privilege::Privilege(Label* label) : label_(label) {}
 
   bool Privilege::equals(Privilege* other) const {
     return label_->equals(other->label_);
@@ -62,5 +74,7 @@ namespace blink {
     retval.append(")");
     return retval;
   }
+
+  DEFINE_TRACE(Privilege) { visitor->Trace(label_); }
 
 }  // namespace blink

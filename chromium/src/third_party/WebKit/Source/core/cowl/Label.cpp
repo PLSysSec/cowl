@@ -15,11 +15,17 @@
  *  Boston, MA 02110-1301 USA
  */
 
-#include <algorithm>
-#include <iterator>
 #include "core/cowl/Label.h"
 
+#include <algorithm>
+#include <iterator>
+#include "core/cowl/Privilege.h"
+
 namespace blink {
+
+  Label* Label::Create() {
+    return new Label();
+  }
 
   Label* Label::Create(const String& principal) {
     Label* label = Label::Create();
@@ -32,6 +38,10 @@ namespace blink {
     label->roles_.push_back(role);
     return label;
   }
+
+  Label::Label() {}
+
+  Label::Label(const DisjunctionSetArray& roles) : roles_(roles) {}
 
   bool Label::equals(Label* other) const {
     // Break out early if the other and this are the same.
@@ -72,6 +82,10 @@ namespace blink {
         return false;
     }
     return true;
+  }
+
+  bool Label::subsumes(Label* other, Privilege* priv) const {
+    return and_(priv->asLabel())->subsumes(other);
   }
 
   Label* Label::and_(const String& principal) const {
@@ -119,6 +133,14 @@ namespace blink {
       _this->InternalOr(other_roles->at(i));
     }
     return _this;
+  }
+
+  bool Label::isEmpty() const {
+    return !roles_.size();
+  }
+
+  Label* Label::clone() const {
+    return new Label(roles_);
   }
 
   String Label::toString() const {
