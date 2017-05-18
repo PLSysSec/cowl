@@ -22,59 +22,59 @@
 
 namespace blink {
 
-  Privilege* Privilege::Create() {
-    return new Privilege();
+Privilege* Privilege::Create() {
+  return new Privilege();
+}
+
+Privilege* Privilege::CreateForJSConstructor() {
+  String uuid = "unique:";
+  uuid.append(CreateCanonicalUUIDString());
+  Label* label = Label::Create(uuid);
+  return new Privilege(label);
+}
+
+Privilege::Privilege() {
+  label_ = Label::Create();
+}
+
+Privilege::Privilege(Label* label) : label_(label) {}
+
+bool Privilege::equals(Privilege* other) const {
+  return label_->equals(other->label_);
+}
+
+bool Privilege::subsumes(Privilege* other) const {
+  return label_->subsumes(other->label_);
+}
+
+Privilege* Privilege::combine(Privilege* other) const {
+  Label* new_label = label_->and_(other->label_);
+  return new Privilege(new_label);
+}
+
+Privilege* Privilege::delegate(Label* label, ExceptionState& exception_state) const {
+  if (!label_->subsumes(label)) {
+    exception_state.ThrowSecurityError("SecurityError: Earlier privilege does not subsume label.");
+    return nullptr;
   }
+  return new Privilege(label);
+}
 
-  Privilege* Privilege::CreateForJSConstructor() {
-    String uuid = "unique:";
-    uuid.append(CreateCanonicalUUIDString());
-    Label* label = Label::Create(uuid);
-    return new Privilege(label);
-  }
+bool Privilege::isEmpty() const {
+  return label_->isEmpty();
+}
 
-  Privilege::Privilege() {
-    label_ = Label::Create();
-  }
+Label* Privilege::asLabel() const {
+  return label_->clone();
+}
 
-  Privilege::Privilege(Label* label) : label_(label) {}
+String Privilege::toString() const {
+  String retval = "Privilege(";
+  retval.append(label_->toString());
+  retval.append(")");
+  return retval;
+}
 
-  bool Privilege::equals(Privilege* other) const {
-    return label_->equals(other->label_);
-  }
-
-  bool Privilege::subsumes(Privilege* other) const {
-    return label_->subsumes(other->label_);
-  }
-
-  Privilege* Privilege::combine(Privilege* other) const {
-    Label* new_label = label_->and_(other->label_);
-    return new Privilege(new_label);
-  }
-
-  Privilege* Privilege::delegate(Label* label, ExceptionState& exception_state) const {
-    if (!label_->subsumes(label)) {
-      exception_state.ThrowSecurityError("SecurityError: Earlier privilege does not subsume label.");
-      return nullptr;
-    }
-    return new Privilege(label);
-  }
-
-  bool Privilege::isEmpty() const {
-    return label_->isEmpty();
-  }
-
-  Label* Privilege::asLabel() const {
-    return label_->clone();
-  }
-
-  String Privilege::toString() const {
-    String retval = "Privilege(";
-    retval.append(label_->toString());
-    retval.append(")");
-    return retval;
-  }
-
-  DEFINE_TRACE(Privilege) { visitor->Trace(label_); }
+DEFINE_TRACE(Privilege) { visitor->Trace(label_); }
 
 }  // namespace blink
