@@ -33,14 +33,11 @@ class Privilege final : public GarbageCollectedFinalized<Privilege>,
 
  public:
   static Privilege* Create();
+  static Privilege* Create(String);
   static Privilege* CreateForJSConstructor();
-  bool equals(Privilege*) const;
-  bool subsumes(Privilege*) const;
+  Label* asLabel() const;
   Privilege* combine(Privilege*) const;
   Privilege* delegate(Label*, ExceptionState&) const;
-  bool isEmpty() const;
-  Label* asLabel() const;
-  String toString() const;
 
   DECLARE_TRACE();
 

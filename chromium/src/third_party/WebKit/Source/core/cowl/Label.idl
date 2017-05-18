@@ -43,24 +43,14 @@
   /**
    * Add role to this label and return the label.
    */
-  [ImplementedAs=and_] Label and(DOMString principal);
   [ImplementedAs=and_] Label and(Label other);
+  [ImplementedAs=and_] Label and(DOMString principal);
 
   /**
    * Add the principals in the role to all the label roles.
    */
-  [ImplementedAs=or_] Label _or(DOMString principal);
   [ImplementedAs=or_] Label _or(Label other);
-
-  /**
-   * Is this label empty?
-   */
-  readonly attribute boolean isEmpty;
-
-  /**
-   * Make a new copy of this label.
-   */
-  Label clone();
+  [ImplementedAs=or_] Label _or(DOMString principal);
 
   stringifier;
 };

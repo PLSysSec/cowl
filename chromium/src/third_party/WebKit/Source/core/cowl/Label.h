@@ -45,13 +45,13 @@ class Label final : public GarbageCollectedFinalized<Label>,
   Label* and_(Label*) const;
   Label* or_(const String& principal) const;
   Label* or_(Label*) const;
-  bool isEmpty() const;
-  Label* clone() const;
   String toString() const;
 
   // Helper functions
   void InternalAnd(DisjunctionSet&, bool clone = false);
   void InternalOr(DisjunctionSet&);
+  bool IsEmpty() const;
+  Label* Clone() const;
   bool Contains(DisjunctionSet&) const;
   void RemoveRolesSubsumedBy(DisjunctionSet&);
 
@@ -63,6 +63,8 @@ class Label final : public GarbageCollectedFinalized<Label>,
  private:
   Label();
   explicit Label(const DisjunctionSetArray& roles);
+  Label(const Label&);
+
   DisjunctionSetArray roles_;
 };
 

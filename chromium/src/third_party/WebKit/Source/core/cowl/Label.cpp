@@ -43,6 +43,13 @@ Label::Label() {}
 
 Label::Label(const DisjunctionSetArray& roles) : roles_(roles) {}
 
+Label::Label(const Label& other) {
+  for (unsigned i = 0; i < other.roles_.size(); ++i) {
+    DisjunctionSet dset = DisjunctionSetUtils::CloneDset(other.roles_[i]);
+    roles_.push_back(dset);
+  }
+}
+
 bool Label::equals(Label* other) const {
   // Break out early if the other and this are the same.
   if (other == this)
@@ -94,13 +101,13 @@ Label* Label::and_(const String& principal) const {
       COWLPrincipalType::kOriginPrincipal);
   DisjunctionSet new_dset = DisjunctionSetUtils::ConstructDset(new_principal);
 
-  Label* _this = clone();
+  Label* _this = Clone();
   _this->InternalAnd(new_dset, true);
   return _this;
 }
 
 Label* Label::and_(Label* label) const {
-  Label* _this = clone();
+  Label* _this = Clone();
 
   DisjunctionSetArray* other_roles = label->GetDirectRoles();
   for (unsigned i = 0; i < other_roles->size(); ++i) {
@@ -110,10 +117,10 @@ Label* Label::and_(Label* label) const {
 }
 
 Label* Label::or_(const String& principal) const {
-  if (isEmpty())
+  if (IsEmpty())
     return nullptr;
 
-  Label* _this = clone();
+  Label* _this = Clone();
 
   COWLPrincipal new_principal = COWLPrincipal(
       principal,
@@ -126,7 +133,7 @@ Label* Label::or_(const String& principal) const {
 }
 
 Label* Label::or_(Label* label) const {
-  Label* _this = clone();
+  Label* _this = Clone();
 
   DisjunctionSetArray* other_roles = label->GetDirectRoles();
   for (unsigned i = 0; i < other_roles->size(); ++i) {
@@ -135,16 +142,8 @@ Label* Label::or_(Label* label) const {
   return _this;
 }
 
-bool Label::isEmpty() const {
-  return !roles_.size();
-}
-
-Label* Label::clone() const {
-  return new Label(roles_);
-}
-
 String Label::toString() const {
-  if (isEmpty())
+  if (IsEmpty())
     return "'none'";
 
   size_t roles_length = roles_.size();
@@ -186,7 +185,7 @@ void Label::InternalAnd(DisjunctionSet& role, bool clone) {
 }
 
 void Label::InternalOr(DisjunctionSet& role) {
-  if (isEmpty())
+  if (IsEmpty())
     return;
 
   /* Create a new label to which we'll add new roles containing the
@@ -201,6 +200,14 @@ void Label::InternalOr(DisjunctionSet& role) {
     tmp_label.InternalAnd(n_role);
   }
   roles_.swap(*(tmp_label.GetDirectRoles()));
+}
+
+bool Label::IsEmpty() const {
+  return !roles_.size();
+}
+
+Label* Label::Clone() const {
+  return new Label(*this);
 }
 
 bool Label::Contains(DisjunctionSet& role) const {

@@ -22,33 +22,9 @@
      NamedConstructor=FreshPrivilege()
 ] interface Privilege {
 
-  /**
-   * Returns whether the other privilege equal the other.
-   */
-  boolean equals(Privilege other);
+  Label asLabel();
 
-  /**
-   * Returns whether the other privilege is equal to or weaker than
-   * this privilege.
-   */
-  boolean subsumes(Privilege other);
-
-  /**
-   * Join privileges.
-   */
   Privilege combine(Privilege other);
 
   [RaisesException] Privilege delegate(Label label);
-
-  /**
-   * Is this privilege empty?
-   */
-  readonly attribute boolean isEmpty;
-
-  /**
-   * Get a copy of the underlying label.
-   */
-  readonly attribute Label asLabel;
-
-  stringifier;
 };

@@ -26,6 +26,11 @@ Privilege* Privilege::Create() {
   return new Privilege();
 }
 
+Privilege* Privilege::Create(String priv) {
+  Label* label = Label::Create(priv);
+  return new Privilege(label);
+}
+
 Privilege* Privilege::CreateForJSConstructor() {
   String uuid = "unique:";
   uuid.append(CreateCanonicalUUIDString());
@@ -39,12 +44,8 @@ Privilege::Privilege() {
 
 Privilege::Privilege(Label* label) : label_(label) {}
 
-bool Privilege::equals(Privilege* other) const {
-  return label_->equals(other->label_);
-}
-
-bool Privilege::subsumes(Privilege* other) const {
-  return label_->subsumes(other->label_);
+Label* Privilege::asLabel() const {
+  return label_->Clone();
 }
 
 Privilege* Privilege::combine(Privilege* other) const {
@@ -58,21 +59,6 @@ Privilege* Privilege::delegate(Label* label, ExceptionState& exception_state) co
     return nullptr;
   }
   return new Privilege(label);
-}
-
-bool Privilege::isEmpty() const {
-  return label_->isEmpty();
-}
-
-Label* Privilege::asLabel() const {
-  return label_->clone();
-}
-
-String Privilege::toString() const {
-  String retval = "Privilege(";
-  retval.append(label_->toString());
-  retval.append(")");
-  return retval;
 }
 
 DEFINE_TRACE(Privilege) { visitor->Trace(label_); }
