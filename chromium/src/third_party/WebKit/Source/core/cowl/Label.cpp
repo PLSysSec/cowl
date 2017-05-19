@@ -210,6 +210,25 @@ Label* Label::Clone() const {
   return new Label(*this);
 }
 
+Label* Label::Upgrade(Privilege* priv) const {
+  return this->and_(priv->asLabel());
+}
+
+Label* Label::Downgrade(Privilege* priv) const {
+  Label* new_label = Label::Create();
+
+  Label* priv_label = priv->asLabel();
+  for (unsigned i = 0; i < roles_.size(); ++i) {
+    DisjunctionSet role = roles_[i];
+    Label curr;
+    curr.roles_.push_back(role);
+
+    if (!priv_label->subsumes(&curr))
+      new_label->InternalAnd(role, true);
+  }
+  return new_label;
+}
+
 bool Label::Contains(DisjunctionSet& role) const {
   for (unsigned i = 0; i < roles_.size(); ++i) {
     // find at least one role that subsumes the argument

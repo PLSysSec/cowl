@@ -1024,6 +1024,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void InitContentSecurityPolicy(ContentSecurityPolicy* = nullptr);
 
+  void InitCOWL(COWL* = nullptr);
+
   bool IsSecureTransitionTo(const KURL&) const;
 
   bool AllowInlineEventHandler(Node*,

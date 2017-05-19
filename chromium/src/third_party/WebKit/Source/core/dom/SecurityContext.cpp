@@ -27,6 +27,7 @@
 #include "core/dom/SecurityContext.h"
 
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/cowl/COWL.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
@@ -42,6 +43,7 @@ SecurityContext::~SecurityContext() {}
 
 DEFINE_TRACE(SecurityContext) {
   visitor->Trace(content_security_policy_);
+  visitor->Trace(cowl_);
 }
 
 void SecurityContext::SetSecurityOrigin(
@@ -53,6 +55,10 @@ void SecurityContext::SetSecurityOrigin(
 void SecurityContext::SetContentSecurityPolicy(
     ContentSecurityPolicy* content_security_policy) {
   content_security_policy_ = content_security_policy;
+}
+
+void SecurityContext::SetCOWL(COWL* cowl) {
+  cowl_ = cowl;
 }
 
 void SecurityContext::EnforceSandboxFlags(SandboxFlags mask) {

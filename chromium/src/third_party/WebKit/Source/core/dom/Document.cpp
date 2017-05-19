@@ -145,6 +145,7 @@
 #include "core/frame/PerformanceMonitor.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/cowl/COWL.h"
 #include "core/html/DocumentNameCollection.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLAnchorElement.h"
@@ -5738,6 +5739,14 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
 
   if (GetSecurityOrigin()->HasSuborigin())
     EnforceSuborigin(*GetSecurityOrigin()->GetSuborigin());
+
+  // Initialize COWL 
+  InitCOWL();
+}
+
+void Document::InitCOWL(COWL* cowl) {
+  SetCOWL(cowl ? cowl : COWL::Create());
+  GetCOWL()->BindToExecutionContext(this);
 }
 
 void Document::InitContentSecurityPolicy(ContentSecurityPolicy* csp) {

@@ -48,6 +48,7 @@ namespace blink {
 
 class SecurityOrigin;
 class ContentSecurityPolicy;
+class COWL;
 
 class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   WTF_MAKE_NONCOPYABLE(SecurityContext);
@@ -61,6 +62,7 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   ContentSecurityPolicy* GetContentSecurityPolicy() const {
     return content_security_policy_.Get();
   }
+  COWL* GetCOWL() const { return cowl_.Get(); }
 
   // Explicitly override the security origin for this security context.
   // Note: It is dangerous to change the security origin of a script context
@@ -105,10 +107,12 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   virtual ~SecurityContext();
 
   void SetContentSecurityPolicy(ContentSecurityPolicy*);
+  void SetCOWL(COWL*);
 
  private:
   RefPtr<SecurityOrigin> security_origin_;
   Member<ContentSecurityPolicy> content_security_policy_;
+  Member<COWL> cowl_;
   std::unique_ptr<WebFeaturePolicy> feature_policy_;
 
   SandboxFlags sandbox_flags_;

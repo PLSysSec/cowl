@@ -52,6 +52,8 @@ class Label final : public GarbageCollectedFinalized<Label>,
   void InternalOr(DisjunctionSet&);
   bool IsEmpty() const;
   Label* Clone() const;
+  Label* Upgrade(Privilege*) const;
+  Label* Downgrade(Privilege*) const;
   bool Contains(DisjunctionSet&) const;
   void RemoveRolesSubsumedBy(DisjunctionSet&);
 

@@ -36,6 +36,7 @@ core_idl_files = get_path_info([
                                  "animation/DocumentTimeline.idl",
                                  "clipboard/DataTransfer.idl",
                                  "clipboard/DataTransferItemList.idl",
+                                 "cowl/COWL.idl",
                                  "cowl/Label.idl",
                                  "cowl/Privilege.idl",
                                  "css/CSS.idl",

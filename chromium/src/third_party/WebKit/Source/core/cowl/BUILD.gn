@@ -6,6 +6,8 @@ import("//third_party/WebKit/Source/core/core.gni")
 
 blink_core_sources("cowl") {
   sources = [
+    "COWL.cpp",
+    "COWL.h",
     "Label.cpp",
     "Label.h",
     "Privilege.cpp",
