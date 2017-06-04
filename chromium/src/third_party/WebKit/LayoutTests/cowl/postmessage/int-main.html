@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script src="../../resources/testharness.js"></script>
+<script src="../../resources/testharnessreport.js"></script>
+<iframe></iframe>
+<script>
+
+var iframe = document.querySelector('iframe');
+
+async_test(t => {
+    iframe.onload = t.step_func(() => {
+      iframe.contentWindow.postMessage('hello', '*');
+      });
+
+    window.addEventListener('message', t.step_func(e => {
+        assert_unreached('Message should be dropped by COWL');
+        }));
+
+    // Success on timeout: message to iframe dropped by COWL
+    t.step_timeout(() => { t.done(); }, 2000);
+
+    iframe.src = 'int-iframe.html';
+    }, 'Testing Integrity PostMessage');
+
+</script>
+</body>
+</html>

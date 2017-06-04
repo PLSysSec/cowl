@@ -60,6 +60,12 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
 
   static bool LabelRaiseWillResultInStuckContext(ScriptState*, Label*, Privilege*);
 
+  Label* GetConfidentiality();
+
+  Label* GetIntegrity();
+
+  Privilege* GetPrivilege();
+
   DECLARE_TRACE();
 
  private:

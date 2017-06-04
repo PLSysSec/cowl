@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "bindings/core/v8/WindowProxyManager.h"
+#include "core/cowl/COWL.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
@@ -234,6 +235,23 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
                         UseCounter::kPostMessageFromInsecureToSecureToplevel);
     }
   }
+
+  // TODO: verify all three are the same
+  // COWL* src_cowl = source_document->GetFrame()->GetSecurityContext()->GetCOWL();
+  // COWL* src_cowl = source->GetExecutionContext()->GetSecurityContext().GetCOWL();
+  COWL* src_cowl = source->GetFrame()->GetSecurityContext()->GetCOWL();
+
+  Privilege* priv = src_cowl->GetPrivilege();
+  Label* conf = src_cowl->GetConfidentiality()->Downgrade(priv);
+  Label* integrity = src_cowl->GetIntegrity()->Upgrade(priv);
+
+  COWL* dst_cowl = GetFrame()->GetSecurityContext()->GetCOWL();
+  Privilege* dst_priv = dst_cowl->GetPrivilege();
+  Label* dst_conf = dst_cowl->GetConfidentiality()->Upgrade(dst_priv);
+  Label* dst_integrity = dst_cowl->GetIntegrity();
+
+  if (!dst_conf->subsumes(conf) || !integrity->subsumes(dst_integrity))
+    return;
 
   MessageEvent* event =
       MessageEvent::Create(std::move(channels), std::move(message),

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<script>
+'use strict';
+
+COWL.enable();
+COWL.privilege = new FreshPrivilege();
+COWL.integrity = COWL.privilege.asLabel(); 
+
+function receiveMessage(event)
+{
+  parent.postMessage('hello', '*');
+}
+
+window.addEventListener('message', receiveMessage, false);
+
+</script>

@@ -125,6 +125,12 @@ bool COWL::LabelRaiseWillResultInStuckContext(ScriptState* script_state,
   return !effective_label->IsEmpty();
 }
 
+Label* COWL::GetConfidentiality() { return confidentiality_; }
+
+Label* COWL::GetIntegrity() { return integrity_; }
+
+Privilege* COWL::GetPrivilege() { return privilege_; }
+
 DEFINE_TRACE(COWL) { 
   visitor->Trace(execution_context_);
   visitor->Trace(confidentiality_);

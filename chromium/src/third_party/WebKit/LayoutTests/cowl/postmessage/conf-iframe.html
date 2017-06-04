@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<script>
+'use strict';
+
+COWL.enable();
+COWL.confidentiality = new Label('http://alice.com');
+window.parent.postMessage('hello', '*');
+
+</script>
