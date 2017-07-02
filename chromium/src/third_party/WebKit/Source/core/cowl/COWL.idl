@@ -26,9 +26,9 @@
   [CallWith=ScriptState] static boolean isEnabled();
 
   // Current label
-  [CallWith=ScriptState, RaisesException] static attribute Label confidentiality;
-  [CallWith=ScriptState, RaisesException] static attribute Label integrity;
+  [CallWith=ScriptState, RaisesException=Setter] static attribute Label confidentiality;
+  [CallWith=ScriptState, RaisesException=Setter] static attribute Label integrity;
 
   // Privilege
-  [CallWith=ScriptState, RaisesException] static attribute Privilege? privilege;
+  [CallWith=ScriptState, RaisesException=Setter] static attribute Privilege? privilege;
 };

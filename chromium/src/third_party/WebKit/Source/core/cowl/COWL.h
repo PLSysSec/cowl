@@ -43,27 +43,23 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
   static void enable(ScriptState*);
   static bool isEnabled(const ScriptState*);
 
-  static Label* confidentiality(const ScriptState*, ExceptionState&);
+  static Label* confidentiality(const ScriptState*);
   static void setConfidentiality(ScriptState*, Label*, ExceptionState&);
 
-  static Label* integrity(const ScriptState*, ExceptionState&);
+  static Label* integrity(const ScriptState*);
   static void setIntegrity(ScriptState*, Label*, ExceptionState&);
 
-  static Privilege* privilege(const ScriptState*, ExceptionState&);
+  static Privilege* privilege(const ScriptState*);
   static void setPrivilege(ScriptState*, Privilege*, ExceptionState&);
 
   void BindToExecutionContext(ExecutionContext*);
-
   void SetupSelf(const SecurityOrigin&);
-
   void ApplyPolicySideEffectsToExecutionContext();
 
   static bool LabelRaiseWillResultInStuckContext(ScriptState*, Label*, Privilege*);
 
   Label* GetConfidentiality();
-
   Label* GetIntegrity();
-
   Privilege* GetPrivilege();
 
   DECLARE_TRACE();

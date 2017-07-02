@@ -38,15 +38,15 @@ bool COWL::isEnabled(const ScriptState* script_state) {
   return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->enabled_;
 }
 
-Label* COWL::confidentiality(const ScriptState* script_state, ExceptionState& exception_state) {
+Label* COWL::confidentiality(const ScriptState* script_state) {
   return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->confidentiality_;
 }
 
 void COWL::setConfidentiality(ScriptState* script_state, Label* label, ExceptionState& exception_state) {
   enable(script_state);
 
-  Label* current_label = confidentiality(script_state, exception_state);
-  Privilege* priv = privilege(script_state, exception_state);
+  Label* current_label = confidentiality(script_state);
+  Privilege* priv = privilege(script_state);
   if (!label->subsumes(current_label, priv)) {
     exception_state.ThrowSecurityError("Label is not above the current label.");
     return;
@@ -58,15 +58,15 @@ void COWL::setConfidentiality(ScriptState* script_state, Label* label, Exception
   ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->confidentiality_ = label;
 }
 
-Label* COWL::integrity(const ScriptState* script_state, ExceptionState& exception_state) {
+Label* COWL::integrity(const ScriptState* script_state) {
   return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->integrity_;
 }
 
 void COWL::setIntegrity(ScriptState* script_state, Label* label, ExceptionState& exception_state) {
   enable(script_state);
 
-  Label* current_label = integrity(script_state, exception_state);
-  Privilege* priv = privilege(script_state, exception_state);
+  Label* current_label = integrity(script_state);
+  Privilege* priv = privilege(script_state);
   if (!current_label->subsumes(label, priv)) {
     exception_state.ThrowSecurityError("Label is not below the current label.");
     return;
@@ -74,14 +74,14 @@ void COWL::setIntegrity(ScriptState* script_state, Label* label, ExceptionState&
   ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->integrity_ = label;
 }
 
-Privilege* COWL::privilege(const ScriptState* script_state, ExceptionState& exception_state) {
+Privilege* COWL::privilege(const ScriptState* script_state) {
   return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->privilege_;
 }
 
 void COWL::setPrivilege(ScriptState* script_state, Privilege* priv, ExceptionState& exception_state) {
   enable(script_state);
 
-  Label* current_label = confidentiality(script_state, exception_state);
+  Label* current_label = confidentiality(script_state);
   if (LabelRaiseWillResultInStuckContext(script_state, current_label, priv)) {
     exception_state.ThrowSecurityError("Sorry cant do that, create a frame.");
     return;
