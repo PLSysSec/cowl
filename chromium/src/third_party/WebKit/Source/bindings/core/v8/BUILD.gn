@@ -17,6 +17,8 @@ generated_core_dictionary_files = [
   "$blink_core_output_dir/animation/ComputedTimingProperties.h",
   "$blink_core_output_dir/animation/KeyframeEffectOptions.cpp",
   "$blink_core_output_dir/animation/KeyframeEffectOptions.h",
+  "$blink_core_output_dir/cowl/CILabel.cpp",
+  "$blink_core_output_dir/cowl/CILabel.h",
   "$blink_core_output_dir/css/FontFaceDescriptors.cpp",
   "$blink_core_output_dir/css/FontFaceDescriptors.h",
   "$blink_core_output_dir/css/FontFaceSetLoadEventInit.cpp",

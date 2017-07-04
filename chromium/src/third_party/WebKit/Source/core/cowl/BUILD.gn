@@ -10,6 +10,8 @@ blink_core_sources("cowl") {
     "COWL.h",
     "Label.cpp",
     "Label.h",
+    "LabeledObject.cpp",
+    "LabeledObject.h",
     "Privilege.cpp",
     "Privilege.h",
   ]

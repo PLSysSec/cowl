@@ -1,0 +1,137 @@
+/*
+ *  This library is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU Lesser General Public
+ *  License as published by the Free Software Foundation; either
+ *  version 2 of the License, or (at your option) any later version.
+ *
+ *  This library is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *  Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public
+ *  License along with this library; if not, write to the Free Software
+ *  Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ *  Boston, MA 02110-1301 USA
+ */
+
+#include "core/cowl/LabeledObject.h"
+
+#include "core/cowl/COWL.h"
+#include "core/cowl/Label.h"
+#include "core/cowl/Privilege.h"
+
+namespace blink {
+
+LabeledObject* LabeledObject::Create(ScriptState* script_state, ScriptValue obj, CILabel& labels, ExceptionState& exception_state) {
+  COWL::enable(script_state);
+
+  Label* confidentiality;
+  if (labels.hasConfidentiality())
+    confidentiality = labels.confidentiality();
+  else
+    confidentiality = COWL::confidentiality(script_state);
+
+  Label* integrity;
+  if (labels.hasIntegrity())
+    integrity = labels.integrity();
+  else
+    integrity = COWL::integrity(script_state);
+
+  if (!COWL::WriteCheck(script_state, confidentiality, integrity)) {
+    exception_state.ThrowSecurityError("Label of blob is not above current label or below current clearance.");
+    return nullptr;
+  }
+  // Create a structured clone
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::Local<v8::Value> value = obj.V8Value();
+  RefPtr<SerializedScriptValue> serialized =
+    SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
+  v8::Local<v8::Value> result = serialized->Deserialize(isolate);
+  // If there's a problem during deserialization, it results in null
+  if (result->IsNull()) {
+    exception_state.ThrowDOMException(kDataCloneError, "Object cannot be serialized");
+    return nullptr;
+  }
+  ScriptValue obj_clone =  ScriptValue(script_state, result);
+
+  return new LabeledObject(obj_clone, confidentiality, integrity);
+}
+
+LabeledObject::LabeledObject(ScriptValue obj, Label* conf, Label* integrity)
+  : obj_(obj),
+    confidentiality_(conf),
+    integrity_(integrity) {}
+
+Label* LabeledObject::confidentiality() {
+  // Should this return confidentiality_->Clone()? (Labels are immutable)
+  return confidentiality_;
+}
+
+Label* LabeledObject::integrity() {
+  return integrity_;
+}
+
+ScriptValue LabeledObject::protectedObject(ScriptState* script_state, ExceptionState& exception_state) {
+  COWL::enable(script_state);
+
+  Privilege* priv = COWL::privilege(script_state);
+
+  Label* curr_conf = COWL::confidentiality(script_state);
+  Label* tmp_conf = curr_conf->and_(confidentiality_);
+  Label* new_conf = tmp_conf->Downgrade(priv);
+
+  if (COWL::LabelRaiseWillResultInStuckContext(script_state, new_conf, priv)) {
+    exception_state.ThrowSecurityError("SecurityError: Will result in stuck-context, please use an iFrame");
+    return ScriptValue::CreateNull(script_state);
+  }
+
+  COWL::setConfidentiality(script_state, new_conf, exception_state);
+
+  Label* curr_integrity = COWL::integrity(script_state);
+  Label* tmp_integrity = curr_integrity->or_(integrity_);
+  Label* new_integrity = tmp_integrity->Downgrade(priv);
+
+  COWL::setIntegrity(script_state, new_integrity, exception_state);
+
+  // Returns a reference to the JS object. Should it be a clone instead? (context will be tainted anyways)
+  return obj_;
+}
+
+LabeledObject* LabeledObject::clone(ScriptState* script_state, CILabel& labels, ExceptionState& exception_state) {
+  Label* new_conf;
+  if (labels.hasConfidentiality())
+    new_conf = labels.confidentiality();
+  else
+    new_conf = confidentiality_;
+
+  Label* new_int;
+  if (labels.hasIntegrity())
+    new_int = labels.integrity();
+  else
+    new_int = integrity_;
+
+  Privilege* priv = COWL::privilege(script_state);
+
+  if (!new_conf->subsumes(confidentiality_, priv)) {
+    exception_state.ThrowSecurityError("SecurityError: Confidentiality label needs to be more restrictive");
+    return nullptr;
+  }
+    
+  if (!integrity_->subsumes(new_int, priv)) {
+    exception_state.ThrowSecurityError("SecurityError: Check integrity label");
+    return nullptr;
+  }
+
+  CILabel new_labels;
+  new_labels.setConfidentiality(new_conf);
+  new_labels.setIntegrity(new_int);
+  return Create(script_state, obj_, new_labels, exception_state);
+}
+
+DEFINE_TRACE(LabeledObject) {
+  visitor->Trace(confidentiality_);
+  visitor->Trace(integrity_);
+}
+
+}  // namespace blink

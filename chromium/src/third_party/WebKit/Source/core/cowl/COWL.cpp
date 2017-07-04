@@ -125,6 +125,17 @@ bool COWL::LabelRaiseWillResultInStuckContext(ScriptState* script_state,
   return !effective_label->IsEmpty();
 }
 
+bool COWL::WriteCheck(ScriptState* script_state, Label* obj_conf, Label* obj_int) {
+  Privilege* priv = privilege(script_state);
+  Label* current_conf = confidentiality(script_state)->Downgrade(priv);
+  Label* current_int = integrity(script_state)->Upgrade(priv);
+
+  if (!obj_conf->subsumes(current_conf) || !current_int->subsumes(obj_int))
+    return false;
+
+  return true;
+}
+
 Label* COWL::GetConfidentiality() { return confidentiality_; }
 
 Label* COWL::GetIntegrity() { return integrity_; }

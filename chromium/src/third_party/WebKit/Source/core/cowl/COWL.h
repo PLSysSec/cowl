@@ -57,6 +57,7 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
   void ApplyPolicySideEffectsToExecutionContext();
 
   static bool LabelRaiseWillResultInStuckContext(ScriptState*, Label*, Privilege*);
+  static bool WriteCheck(ScriptState*, Label*, Label*);
 
   Label* GetConfidentiality();
   Label* GetIntegrity();
