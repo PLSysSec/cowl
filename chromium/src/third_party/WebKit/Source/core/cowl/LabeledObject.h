@@ -21,8 +21,8 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8CILabel.h"
-#include "platform/heap/Handle.h"
 #include "platform/bindings/ScriptWrappable.h"
+#include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
 
 namespace blink {
@@ -44,6 +44,9 @@ class LabeledObject final : public GarbageCollectedFinalized<LabeledObject>,
   LabeledObject* clone(ScriptState*, CILabel&, ExceptionState&);
 
   DECLARE_TRACE();
+
+  // Helper functions
+  static ScriptValue StructuredClone(ScriptState*, ScriptValue, ExceptionState&);
 
  private:
   LabeledObject(ScriptValue, Label* conf, Label* integrity);

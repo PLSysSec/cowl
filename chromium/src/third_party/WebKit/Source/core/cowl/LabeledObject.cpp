@@ -42,21 +42,12 @@ LabeledObject* LabeledObject::Create(ScriptState* script_state, ScriptValue obj,
     exception_state.ThrowSecurityError("Label of blob is not above current label or below current clearance.");
     return nullptr;
   }
-  // Create a structured clone
-  v8::Isolate* isolate = script_state->GetIsolate();
-  v8::Local<v8::Value> value = obj.V8Value();
-  RefPtr<SerializedScriptValue> serialized =
-    SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
-  v8::Local<v8::Value> result = serialized->Deserialize(isolate);
-  // If there's a problem during deserialization, it results in null
-  if (result->IsNull()) {
-    exception_state.ThrowDOMException(kDataCloneError, "Object cannot be serialized");
-    return nullptr;
-  }
-  ScriptValue obj_clone =  ScriptValue(script_state, result);
+
+  ScriptValue obj_clone =  StructuredClone(script_state, obj, exception_state);
 
   return new LabeledObject(obj_clone, confidentiality, integrity);
 }
+
 
 LabeledObject::LabeledObject(ScriptValue obj, Label* conf, Label* integrity)
   : obj_(obj),
@@ -64,7 +55,6 @@ LabeledObject::LabeledObject(ScriptValue obj, Label* conf, Label* integrity)
     integrity_(integrity) {}
 
 Label* LabeledObject::confidentiality() {
-  // Should this return confidentiality_->Clone()? (Labels are immutable)
   return confidentiality_;
 }
 
@@ -94,8 +84,8 @@ ScriptValue LabeledObject::protectedObject(ScriptState* script_state, ExceptionS
 
   COWL::setIntegrity(script_state, new_integrity, exception_state);
 
-  // Returns a reference to the JS object. Should it be a clone instead? (context will be tainted anyways)
-  return obj_;
+  ScriptValue obj_clone =  StructuredClone(script_state, obj_, exception_state);
+  return obj_clone;
 }
 
 LabeledObject* LabeledObject::clone(ScriptState* script_state, CILabel& labels, ExceptionState& exception_state) {
@@ -127,6 +117,23 @@ LabeledObject* LabeledObject::clone(ScriptState* script_state, CILabel& labels, 
   new_labels.setConfidentiality(new_conf);
   new_labels.setIntegrity(new_int);
   return Create(script_state, obj_, new_labels, exception_state);
+}
+
+// Helper functions
+
+ScriptValue LabeledObject::StructuredClone(ScriptState* script_state, ScriptValue obj, ExceptionState& exception_state) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::Local<v8::Value> value = obj.V8Value();
+  RefPtr<SerializedScriptValue> serialized =
+    SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
+  v8::Local<v8::Value> result = serialized->Deserialize(isolate);
+  // If there's a problem during deserialization, it results in null
+  if (result->IsNull()) {
+    exception_state.ThrowDOMException(kDataCloneError, "Object cannot be serialized");
+    return ScriptValue::CreateNull(script_state);
+  }
+  ScriptValue obj_clone =  ScriptValue(script_state, result);
+  return obj_clone;
 }
 
 DEFINE_TRACE(LabeledObject) {
