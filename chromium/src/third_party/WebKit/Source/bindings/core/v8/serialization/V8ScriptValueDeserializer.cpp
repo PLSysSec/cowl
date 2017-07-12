@@ -5,6 +5,8 @@
 #include "bindings/core/v8/serialization/V8ScriptValueDeserializer.h"
 
 #include "bindings/core/v8/ToV8ForCore.h"
+#include "core/cowl/Label.h"
+#include "core/cowl/LabeledObject.h"
 #include "core/dom/CompositorProxy.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMSharedArrayBuffer.h"
@@ -297,6 +299,25 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       memcpy(pixel_array->Data(), pixels, pixel_length);
       return image_data;
     }
+    case kLabelTag: {
+      return ReadLabel();
+    }
+    case kLabeledObjectTag: {
+      Label* conf = ReadLabel();
+      Label* integrity = ReadLabel();
+
+      v8::Local<v8::Context> context = script_state_->GetContext();
+      v8::Local<v8::Value> value;
+      if (!deserializer_.ReadValue(context).ToLocal(&value))
+        return nullptr;
+      CILabel new_labels;
+      new_labels.setConfidentiality(conf);
+      new_labels.setIntegrity(integrity);
+      v8::Isolate* isolate = script_state_->GetIsolate();
+      ExceptionState exception_state(isolate, ExceptionState::kUnknownContext,
+          nullptr, nullptr);
+      return LabeledObject::Create(script_state_.Get(), ScriptValue(script_state_.Get(), value), new_labels, exception_state);
+    }
     case kMessagePortTag: {
       uint32_t index = 0;
       if (!ReadUint32(&index) || !transferred_message_ports_ ||
@@ -363,6 +384,27 @@ File* V8ScriptValueDeserializer::ReadFileIndex() {
   return File::CreateFromIndexedSerialization(
       info.FilePath(), info.FileName(), info.size(), last_modified_ms,
       GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size()));
+}
+
+Label* V8ScriptValueDeserializer::ReadLabel() {
+  DisjunctionSetArray roles;
+  uint32_t roles_size = 0;
+  ReadUint32(&roles_size);
+  for (unsigned i = 0; i < roles_size; ++i) {
+    uint32_t role_size = 0;
+    ReadUint32(&role_size);
+    DisjunctionSet role = DisjunctionSetUtils::ConstructDset();
+    for (unsigned i = 0; i < role_size; ++i) {
+      String principal;
+      uint32_t type;
+      ReadUTF8String(&principal);
+      ReadUint32(&type);
+      COWLPrincipal new_principal = COWLPrincipal(principal, (COWLPrincipalType)type);
+      role.push_back(new_principal);
+    }
+    roles.push_back(role);
+  }
+  return Label::Create(roles);
 }
 
 RefPtr<BlobDataHandle> V8ScriptValueDeserializer::GetOrCreateBlobDataHandle(

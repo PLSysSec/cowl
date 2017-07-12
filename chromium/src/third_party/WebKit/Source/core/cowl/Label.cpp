@@ -39,6 +39,10 @@ Label* Label::Create(const String& principal) {
   return label;
 }
 
+Label* Label::Create(const DisjunctionSetArray roles) {
+  return new Label(roles);
+}
+
 Label::Label() {}
 
 Label::Label(const DisjunctionSetArray& roles) : roles_(roles) {}
@@ -247,6 +251,8 @@ void Label::RemoveRolesSubsumedBy(DisjunctionSet& role) {
   std::copy(roles_.begin(), new_last, std::back_inserter(new_roles));
   roles_.swap(new_roles);
 }
+
+DisjunctionSetArray Label::GetRoles() { return roles_; }
 
 // Util functions
 DisjunctionSet DisjunctionSetUtils::ConstructDset() {

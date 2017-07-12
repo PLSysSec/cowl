@@ -11,10 +11,13 @@
 #include "bindings/core/v8/V8FileList.h"
 #include "bindings/core/v8/V8ImageBitmap.h"
 #include "bindings/core/v8/V8ImageData.h"
+#include "bindings/core/v8/V8Label.h"
+#include "bindings/core/v8/V8LabeledObject.h"
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8OffscreenCanvas.h"
 #include "bindings/core/v8/V8SharedArrayBuffer.h"
 #include "bindings/core/v8/V8ThrowDOMException.h"
+#include "core/cowl/Label.h"
 #include "core/dom/DOMArrayBufferBase.h"
 #include "core/html/ImageData.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -268,6 +271,31 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
     WriteRawBytes(pixels->Data(), pixels->length());
     return true;
   }
+  if (wrapper_type_info == &V8Label::wrapperTypeInfo) {
+    Label* label = wrappable->ToImpl<Label>();
+    WriteTag(kLabelTag);
+    WriteLabel(label);
+    return true;
+  }
+  if (wrapper_type_info == &V8LabeledObject::wrapperTypeInfo) {
+    LabeledObject* labeled_obj = wrappable->ToImpl<LabeledObject>();
+    WriteTag(kLabeledObjectTag);
+    WriteLabel(labeled_obj->confidentiality());
+    WriteLabel(labeled_obj->integrity());
+
+    ScriptValue obj = labeled_obj->GetObj();
+    v8::Local<v8::Value> value = obj.V8Value();
+    v8::TryCatch try_catch(script_state_->GetIsolate());
+    bool wrote_value;
+    if (!serializer_.WriteValue(script_state_->GetContext(), value)
+        .To(&wrote_value)) {
+      DCHECK(try_catch.HasCaught());
+      exception_state.RethrowV8Exception(try_catch.Exception());
+      return false;
+    }
+    DCHECK(wrote_value);
+    return true;
+  }
   if (wrapper_type_info == &V8MessagePort::wrapperTypeInfo) {
     MessagePort* message_port = wrappable->ToImpl<MessagePort>();
     size_t index = kNotFound;
@@ -363,6 +391,20 @@ bool V8ScriptValueSerializer::WriteFile(File* file,
     WriteUint32(file->GetUserVisibility() == File::kIsUserVisible ? 1 : 0);
   }
   return true;
+}
+
+void V8ScriptValueSerializer::WriteLabel(Label* label) {
+  DisjunctionSetArray roles = label->GetRoles();
+  WriteUint32(roles.size());
+  for (unsigned i = 0; i < roles.size(); ++i) {
+    DisjunctionSet role = roles[i];
+    WriteUint32(role.size());
+    for (unsigned i = 0; i < role.size(); ++i) {
+      COWLPrincipal& principal = role[i];
+      WriteUint32((unsigned int)principal.GetType());
+      WriteUTF8String(principal.ToString());
+    }
+  }
 }
 
 void V8ScriptValueSerializer::ThrowDataCloneError(

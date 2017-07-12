@@ -17,6 +17,7 @@
 namespace blink {
 
 class File;
+class Label;
 
 // Deserializes V8 values serialized using V8ScriptValueSerializer (or its
 // predecessor, ScriptValueSerializer).
@@ -66,6 +67,7 @@ class GC_PLUGIN_IGNORE("https://crbug.com/644725") CORE_EXPORT
 
   File* ReadFile();
   File* ReadFileIndex();
+  Label* ReadLabel();
 
   RefPtr<BlobDataHandle> GetOrCreateBlobDataHandle(const String& uuid,
                                                    const String& type,

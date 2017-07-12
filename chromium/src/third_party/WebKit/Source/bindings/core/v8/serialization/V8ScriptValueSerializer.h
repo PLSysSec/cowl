@@ -18,6 +18,7 @@
 namespace blink {
 
 class File;
+class Label;
 class Transferables;
 
 // Serializes V8 values according to the HTML structured clone algorithm:
@@ -74,6 +75,9 @@ class GC_PLUGIN_IGNORE("https://crbug.com/644725")
 
   // Shared between File and FileList logic; does not write a leading tag.
   bool WriteFile(File*, ExceptionState&);
+
+  // COWL Label
+  void WriteLabel(Label*);
 
   // v8::ValueSerializer::Delegate
   void ThrowDataCloneError(v8::Local<v8::String> message) override;

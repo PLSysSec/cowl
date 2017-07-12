@@ -46,6 +46,7 @@ class LabeledObject final : public GarbageCollectedFinalized<LabeledObject>,
   DECLARE_TRACE();
 
   // Helper functions
+  ScriptValue GetObj();
   static ScriptValue StructuredClone(ScriptState*, ScriptValue, ExceptionState&);
 
  private:

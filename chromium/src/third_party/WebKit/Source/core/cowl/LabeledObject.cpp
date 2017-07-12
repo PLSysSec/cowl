@@ -121,6 +121,8 @@ LabeledObject* LabeledObject::clone(ScriptState* script_state, CILabel& labels, 
 
 // Helper functions
 
+ScriptValue LabeledObject::GetObj() { return obj_; }
+
 ScriptValue LabeledObject::StructuredClone(ScriptState* script_state, ScriptValue obj, ExceptionState& exception_state) {
   v8::Isolate* isolate = script_state->GetIsolate();
   v8::Local<v8::Value> value = obj.V8Value();

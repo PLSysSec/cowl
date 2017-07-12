@@ -23,10 +23,10 @@
 namespace blink {
 
 enum class COWLPrincipalType {
-  kAppPrincipal,
-  kUniquePrincipal,
-  kOriginPrincipal,
-  kInvalidPrincipal,
+  kAppPrincipal = 0,
+  kUniquePrincipal = 1,
+  kOriginPrincipal = 2,
+  kInvalidPrincipal = 3,
 };
 
 class COWLPrincipal final {
@@ -39,6 +39,9 @@ class COWLPrincipal final {
   }
   String ToString() const {
     return principal_;
+  }
+  COWLPrincipalType GetType() const {
+    return principal_type_;
   }
   bool operator== (const COWLPrincipal& other) const {
     return principal_ == other.principal_;

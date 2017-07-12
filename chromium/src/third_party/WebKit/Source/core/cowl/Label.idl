@@ -21,7 +21,6 @@
      Constructor,
      Constructor(DOMString principal)
 ] interface Label {
-
   /**
    * Returns whether the other label is equivalent to this label.
    * Labels are considered equal if they have the same roles.

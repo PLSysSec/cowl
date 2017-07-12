@@ -48,6 +48,7 @@ class Label final : public GarbageCollectedFinalized<Label>,
   String toString() const;
 
   // Helper functions
+  static Label* Create (const DisjunctionSetArray);
   void InternalAnd(DisjunctionSet&, bool clone = false);
   void InternalOr(DisjunctionSet&);
   bool IsEmpty() const;
@@ -56,6 +57,7 @@ class Label final : public GarbageCollectedFinalized<Label>,
   Label* Downgrade(Privilege*) const;
   bool Contains(DisjunctionSet&) const;
   void RemoveRolesSubsumedBy(DisjunctionSet&);
+  DisjunctionSetArray GetRoles();
 
   DEFINE_INLINE_TRACE() {}
 
