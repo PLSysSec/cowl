@@ -17,8 +17,8 @@
 
 #include "core/cowl/Privilege.h"
 
-#include "platform/UUID.h"
 #include "core/cowl/Label.h"
+#include "platform/UUID.h"
 
 namespace blink {
 

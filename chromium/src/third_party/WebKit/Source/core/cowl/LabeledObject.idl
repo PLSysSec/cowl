@@ -21,7 +21,7 @@
      ConstructorCallWith=ScriptState,
      Constructor(object obj, optional CILabel labels),
      Exposed=(Window,Worker),
-     RaisesException=Constructor,
+     RaisesException=Constructor
 ] interface LabeledObject {
 
   readonly attribute Label confidentiality;

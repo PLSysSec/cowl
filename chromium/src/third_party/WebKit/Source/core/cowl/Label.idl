@@ -21,33 +21,26 @@
      Constructor,
      Constructor(DOMString principal)
 ] interface Label {
-  /**
-   * Returns whether the other label is equivalent to this label.
-   * Labels are considered equal if they have the same roles.
-   */
+
+  // Returns whether the other label is equivalent to this label.
+  // Labels are considered equal if they have the same roles.
   boolean equals(Label other);
 
-  /**
-   * Returns whether the other label is equal to or weaker than this
-   * label.
-   *
-   * This label subsumes the other label if the set of roles
-   * it contains is a superset of other's roles. That is this
-   * label must have all the roles of the other label.
-   *
-   * Thus a label always subsumes itself.
-   */
+  // Returns whether the other label is equal to or weaker than this
+  // label.
+
+  // This label subsumes the other label if the set of roles
+  // it contains is a superset of other's roles. That is this
+  // label must have all the roles of the other label.
+
+  // Thus a label always subsumes itself.
   boolean subsumes(Label other, optional Privilege priv);
 
-  /**
-   * Add role to this label and return the label.
-   */
+  // Add role to this label and return the label.
   [ImplementedAs=and_] Label and(Label other);
   [ImplementedAs=and_] Label and(DOMString principal);
 
-  /**
-   * Add the principals in the role to all the label roles.
-   */
+  // Add the principals in the role to all the label roles.
   [ImplementedAs=or_] Label _or(Label other);
   [ImplementedAs=or_] Label _or(DOMString principal);
 

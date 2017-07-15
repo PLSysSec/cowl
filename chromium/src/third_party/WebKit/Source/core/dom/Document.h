@@ -38,6 +38,8 @@
 #include "core/dom/DocumentEncodingData.h"
 #include "core/dom/DocumentInit.h"
 #include "core/dom/DocumentLifecycle.h"
+#include "core/dom/DocumentShutdownNotifier.h"
+#include "core/dom/DocumentShutdownObserver.h"
 #include "core/dom/DocumentTiming.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MutationObserver.h"
@@ -48,9 +50,9 @@
 #include "core/dom/TreeScope.h"
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/ViewportDescription.h"
-#include "core/dom/custom/V0CustomElement.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/HostsUsingFeatures.h"
+#include "core/html/custom/V0CustomElement.h"
 #include "core/html/parser/ParserSynchronizationPolicy.h"
 #include "core/page/PageVisibilityState.h"
 #include "platform/Length.h"
@@ -109,7 +111,6 @@ class FloatQuad;
 class FloatRect;
 class FormController;
 class FrameRequestCallback;
-class FrameView;
 class HTMLAllCollection;
 class HTMLBodyElement;
 class HTMLCollection;
@@ -132,6 +133,7 @@ class LiveNodeListBase;
 class LocalDOMWindow;
 class Locale;
 class LocalFrame;
+class LocalFrameView;
 class Location;
 class MediaQueryListListener;
 class MediaQueryMatcher;
@@ -252,6 +254,7 @@ class CORE_EXPORT Document : public ContainerNode,
                              public TreeScope,
                              public SecurityContext,
                              public ExecutionContext,
+                             public DocumentShutdownNotifier,
                              public SynchronousMutationNotifier,
                              public Supplementable<Document> {
   DEFINE_WRAPPERTYPEINFO();
@@ -261,6 +264,11 @@ class CORE_EXPORT Document : public ContainerNode,
   static Document* Create(const DocumentInit& initializer = DocumentInit()) {
     return new Document(initializer);
   }
+  // Factory for web-exposed Document constructor. The argument document must be
+  // a document instance representing window.document, and it works as the
+  // source of ExecutionContext and security origin of the new document.
+  // https://dom.spec.whatwg.org/#dom-document-document
+  static Document* Create(const Document&);
   ~Document() override;
 
   MediaQueryMatcher& GetMediaQueryMatcher();
@@ -294,7 +302,6 @@ class CORE_EXPORT Document : public ContainerNode,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(securitypolicyviolation);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectionchange);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
   bool ShouldMergeWithLegacyDescription(ViewportDescription::Type) const;
   bool ShouldOverrideLegacyDescription(ViewportDescription::Type) const;
@@ -317,9 +324,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Location* location() const;
 
-  Element* createElement(const LocalDOMWindow*,
-                         const AtomicString& name,
-                         ExceptionState&);
   DocumentFragment* createDocumentFragment();
   Text* createTextNode(const String& data);
   Comment* createComment(const String& data);
@@ -333,8 +337,7 @@ class CORE_EXPORT Document : public ContainerNode,
                           ExceptionState&,
                           bool should_ignore_namespace_checks = false);
   Node* importNode(Node* imported_node, bool deep, ExceptionState&);
-  Element* createElementNS(const LocalDOMWindow*,
-                           const AtomicString& namespace_uri,
+  Element* createElementNS(const AtomicString& namespace_uri,
                            const AtomicString& qualified_name,
                            ExceptionState&);
   Element* createElement(const QualifiedName&, CreateElementFlags);
@@ -473,7 +476,7 @@ class CORE_EXPORT Document : public ContainerNode,
   DocumentState* FormElementsState() const;
   void SetStateForNewFormElements(const Vector<String>&);
 
-  FrameView* View() const;                         // can be null
+  LocalFrameView* View() const;                    // can be null
   LocalFrame* GetFrame() const { return frame_; }  // can be null
   Page* GetPage() const;                           // can be null
   Settings* GetSettings() const;                   // can be null
@@ -514,6 +517,16 @@ class CORE_EXPORT Document : public ContainerNode,
   PassRefPtr<ComputedStyle> StyleForElementIgnoringPendingStylesheets(Element*);
   PassRefPtr<ComputedStyle> StyleForPage(int page_index);
 
+  // Ensures that location-based data will be valid for a given node.
+  //
+  // This will run style and layout if they are currently dirty, and it may also
+  // run compositing inputs if the node is in a sticky subtree (as the sticky
+  // offset may change the node's position).
+  //
+  // Due to this you should only call this if you definitely need valid location
+  // data, otherwise use one of the |UpdateStyleAndLayout...| methods above.
+  void EnsurePaintLocationDataValidForNode(const Node*);
+
   // Returns true if page box (margin boxes and page borders) is visible.
   bool IsPageBoxVisible(int page_index);
 
@@ -533,9 +546,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void Initialize();
   virtual void Shutdown();
 
-  void AttachLayoutTree(const AttachContext& = AttachContext()) override {
-    NOTREACHED();
-  }
+  void AttachLayoutTree(AttachContext&) override { NOTREACHED(); }
   void DetachLayoutTree(const AttachContext& = AttachContext()) override {
     NOTREACHED();
   }
@@ -689,6 +700,7 @@ class CORE_EXPORT Document : public ContainerNode,
   bool CanCreateHistoryEntry() const;
 
   TextLinkColors& GetTextLinkColors() { return text_link_colors_; }
+  const TextLinkColors& GetTextLinkColors() const { return text_link_colors_; }
   VisitedLinkState& GetVisitedLinkState() const { return *visited_link_state_; }
 
   MouseEventWithHitTestResults PerformMouseEventHitTest(const HitTestRequest&,
@@ -715,8 +727,8 @@ class CORE_EXPORT Document : public ContainerNode,
   void SetSequentialFocusNavigationStartingPoint(Node*);
   Element* SequentialFocusNavigationStartingPoint(WebFocusType) const;
 
-  void SetActiveHoverElement(Element*);
-  Element* ActiveHoverElement() const { return active_hover_element_.Get(); }
+  void SetActiveElement(Element*);
+  Element* GetActiveElement() const { return active_element_.Get(); }
 
   Element* HoverElement() const { return hover_element_.Get(); }
 
@@ -754,6 +766,7 @@ class CORE_EXPORT Document : public ContainerNode,
   // nodeWillBeRemoved is only safe when removing one node at a time.
   void NodeWillBeRemoved(Node&);
   bool CanAcceptChild(const Node& new_child,
+                      const Node* next,
                       const Node* old_child,
                       ExceptionState&) const;
 
@@ -953,6 +966,7 @@ class CORE_EXPORT Document : public ContainerNode,
   uint64_t DomTreeVersion() const { return dom_tree_version_; }
 
   uint64_t StyleVersion() const { return style_version_; }
+  unsigned ForceLayoutCountForTesting() const { return force_layout_count_; }
 
   enum PendingSheetLayout {
     kNoLayoutWithPendingSheets,
@@ -987,12 +1001,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool IsDNSPrefetchEnabled() const { return is_dns_prefetch_enabled_; }
   void ParseDNSPrefetchControlHeader(const String&);
-
-  void PostTask(TaskType,
-                const WebTraceLocation&,
-                std::unique_ptr<ExecutionContextTask>,
-                const String& task_name_for_instrumentation = g_empty_string)
-      override;  // Executes the task on context's thread asynchronously.
 
   void TasksWereSuspended() final;
   void TasksWereResumed() final;
@@ -1136,17 +1144,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   TextAutosizer* GetTextAutosizer();
 
-  Element* createElement(
-      const AtomicString& local_name,
-      ExceptionState& exception_state = ASSERT_NO_EXCEPTION) {
-    return createElement(nullptr, local_name, exception_state);
-  }
-  Element* createElement(const LocalDOMWindow*,
-                         const AtomicString& local_name,
+  Element* createElement(const AtomicString& local_name,
+                         ExceptionState& = ASSERT_NO_EXCEPTION);
+  Element* createElement(const AtomicString& local_name,
                          const StringOrDictionary&,
                          ExceptionState& = ASSERT_NO_EXCEPTION);
-  Element* createElementNS(const LocalDOMWindow*,
-                           const AtomicString& namespace_uri,
+  Element* createElementNS(const AtomicString& namespace_uri,
                            const AtomicString& qualified_name,
                            const StringOrDictionary&,
                            ExceptionState&);
@@ -1322,6 +1325,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   CoreProbeSink* GetProbeSink() final;
 
+  void SetFeaturePolicy(const String& feature_policy_header);
+
  protected:
   Document(const DocumentInit&, DocumentClassFlags = kDefaultDocumentClass);
 
@@ -1441,10 +1446,11 @@ class CORE_EXPORT Document : public ContainerNode,
   void SendSensitiveInputVisibility();
   void SendSensitiveInputVisibilityInternal();
 
-  void RunExecutionContextTask(std::unique_ptr<ExecutionContextTask>,
-                               bool instrumenting);
-
   bool HaveImportsLoaded() const;
+  void ViewportDefiningElementDidChange();
+
+  void UpdateActiveState(const HitTestRequest&, Element*);
+  void UpdateHoverState(const HitTestRequest&, Element*);
 
   DocumentLifecycle lifecycle_;
 
@@ -1461,7 +1467,7 @@ class CORE_EXPORT Document : public ContainerNode,
   TraceWrapperMember<HTMLImportsController> imports_controller_;
 
   Member<ResourceFetcher> fetcher_;
-  Member<DocumentParser> parser_;
+  TraceWrapperMember<DocumentParser> parser_;
   Member<ContextFeatures> context_features_;
 
   bool well_formed_;
@@ -1493,15 +1499,13 @@ class CORE_EXPORT Document : public ContainerNode,
   // This is cheaper than making setCompatibilityMode virtual.
   bool compatibility_mode_locked_;
 
-  TaskHandle execute_scripts_waiting_for_resources_task_handle_;
-
   bool has_autofocused_;
   TaskRunnerTimer<Document> clear_focused_element_timer_;
   Member<Element> autofocus_element_;
   Member<Element> focused_element_;
   Member<Range> sequential_focus_navigation_starting_point_;
   Member<Element> hover_element_;
-  Member<Element> active_hover_element_;
+  Member<Element> active_element_;
   Member<Element> document_element_;
   UserActionElementSet user_action_elements_;
   Member<RootScrollerController> root_scroller_controller_;
@@ -1510,6 +1514,7 @@ class CORE_EXPORT Document : public ContainerNode,
   static uint64_t global_tree_version_;
 
   uint64_t style_version_;
+  unsigned force_layout_count_ = 0;
 
   HeapHashSet<WeakMember<NodeIterator>> node_iterators_;
   using AttachedRangeSet = HeapHashSet<WeakMember<Range>>;
@@ -1623,8 +1628,6 @@ class CORE_EXPORT Document : public ContainerNode,
   ViewportDescription viewport_description_;
   ViewportDescription legacy_viewport_description_;
   Length viewport_default_min_width_;
-
-  ReferrerPolicy referrer_policy_;
 
   DocumentTiming document_timing_;
   Member<MediaQueryMatcher> media_query_matcher_;

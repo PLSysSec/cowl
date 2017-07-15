@@ -21,15 +21,14 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CoreExport.h"
 #include "core/cowl/Label.h"
-#include "core/cowl/Privilege.h"
-#include "core/dom/ExecutionContext.h"
-#include "core/dom/SecurityContext.h"
-#include "core/frame/LocalDOMWindow.h"
-#include "platform/heap/Handle.h"
 #include "platform/bindings/ScriptWrappable.h"
-#include "platform/weborigin/SecurityOrigin.h"
+#include "platform/heap/Handle.h"
 
 namespace blink {
+
+class ExecutionContext;
+class Privilege;
+class SecurityOrigin;
 
 class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
                                public ScriptWrappable {

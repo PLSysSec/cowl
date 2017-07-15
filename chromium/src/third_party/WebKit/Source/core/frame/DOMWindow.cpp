@@ -19,6 +19,7 @@
 #include "core/frame/Location.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/MixedContentChecker.h"
@@ -118,18 +119,6 @@ DOMWindow* DOMWindow::AnonymousIndexedGetter(uint32_t index) const {
   return child ? child->DomWindow() : nullptr;
 }
 
-bool DOMWindow::AnonymousIndexedSetter(uint32_t index,
-                                       const ScriptValue& value) {
-  // https://html.spec.whatwg.org/C/browsers.html#windowproxy-defineownproperty
-  //   step 2 - 1. If P is an array index property name, return false.
-  //
-  // As an alternative way to implement WindowProxy.[[DefineOwnProperty]] for
-  // array index property names, we always intercept and ignore the set
-  // operation for indexed properties, i.e. [[DefineOwnProperty]] for array
-  // index property names has always no effect.
-  return true;  // Intercept unconditionally but do nothing.
-}
-
 bool DOMWindow::IsCurrentlyDisplayedInFrame() const {
   if (GetFrame())
     SECURITY_CHECK(GetFrame()->DomWindow() == this);
@@ -217,23 +206,33 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
 
   KURL target_url = IsLocalDOMWindow()
                         ? blink::ToLocalDOMWindow(this)->document()->Url()
-                        : KURL(KURL(), GetFrame()
-                                           ->GetSecurityContext()
-                                           ->GetSecurityOrigin()
-                                           ->ToString());
+                        : KURL(NullURL(), GetFrame()
+                                              ->GetSecurityContext()
+                                              ->GetSecurityOrigin()
+                                              ->ToString());
   if (MixedContentChecker::IsMixedContent(source_document->GetSecurityOrigin(),
                                           target_url)) {
-    UseCounter::Count(GetFrame(), UseCounter::kPostMessageFromSecureToInsecure);
+    UseCounter::Count(source->GetFrame(),
+                      WebFeature::kPostMessageFromSecureToInsecure);
   } else if (MixedContentChecker::IsMixedContent(
                  GetFrame()->GetSecurityContext()->GetSecurityOrigin(),
                  source_document->Url())) {
-    UseCounter::Count(GetFrame(), UseCounter::kPostMessageFromInsecureToSecure);
+    UseCounter::Count(source->GetFrame(),
+                      WebFeature::kPostMessageFromInsecureToSecure);
     if (MixedContentChecker::IsMixedContent(
             GetFrame()->Tree().Top().GetSecurityContext()->GetSecurityOrigin(),
             source_document->Url())) {
-      UseCounter::Count(GetFrame(),
-                        UseCounter::kPostMessageFromInsecureToSecureToplevel);
+      UseCounter::Count(source->GetFrame(),
+                        WebFeature::kPostMessageFromInsecureToSecureToplevel);
     }
+  }
+
+  if (!source_document->GetContentSecurityPolicy()->AllowConnectToSource(
+          target_url, RedirectStatus::kNoRedirect,
+          SecurityViolationReportingPolicy::kSuppressReporting)) {
+    UseCounter::Count(
+        source->GetFrame(),
+        WebFeature::kPostMessageOutgoingWouldBeBlockedByConnectSrc);
   }
 
   // TODO: verify all three are the same
@@ -256,7 +255,6 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
   MessageEvent* event =
       MessageEvent::Create(std::move(channels), std::move(message),
                            source_origin, String(), source, source_suborigin);
-
   SchedulePostMessage(event, std::move(target), source_document);
 }
 
@@ -322,7 +320,7 @@ String DOMWindow::CrossDomainAccessErrorMessage(
   // there isn't anything else to show other than "null" for its origin.
   KURL target_url = IsLocalDOMWindow()
                         ? blink::ToLocalDOMWindow(this)->document()->Url()
-                        : KURL(KURL(), target_origin->ToString());
+                        : KURL(NullURL(), target_origin->ToString());
   if (GetFrame()->GetSecurityContext()->IsSandboxed(kSandboxOrigin) ||
       calling_window->document()->IsSandboxed(kSandboxOrigin)) {
     message = "Blocked a frame at \"" +

@@ -17,6 +17,12 @@
 
 #include "core/cowl/COWL.h"
 
+#include "core/cowl/Privilege.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/dom/SecurityContext.h"
+#include "core/frame/LocalDOMWindow.h"
+#include "platform/weborigin/SecurityOrigin.h"
+
 namespace blink {
 
 COWL* COWL::Create() { return new COWL(); }
