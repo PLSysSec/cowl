@@ -250,6 +250,8 @@ String BuildBlockedReason(ResourceRequestBlockedReason reason) {
   switch (reason) {
     case ResourceRequestBlockedReason::CSP:
       return protocol::Network::BlockedReasonEnum::Csp;
+    case ResourceRequestBlockedReason::COWL:
+      return protocol::Network::BlockedReasonEnum::Other;
     case ResourceRequestBlockedReason::kMixedContent:
       return protocol::Network::BlockedReasonEnum::MixedContent;
     case ResourceRequestBlockedReason::kOrigin:

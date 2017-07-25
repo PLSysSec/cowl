@@ -180,6 +180,7 @@ struct FrameFetchContext::FrozenState final
               RefPtr<const SecurityOrigin> parent_security_origin,
               const Optional<WebAddressSpace>& address_space,
               const ContentSecurityPolicy* content_security_policy,
+              const COWL* cowl,
               KURL first_party_for_cookies,
               RefPtr<SecurityOrigin> requestor_origin,
               RefPtr<SecurityOrigin> requestor_origin_for_frame_loading,
@@ -195,6 +196,7 @@ struct FrameFetchContext::FrozenState final
         parent_security_origin(std::move(parent_security_origin)),
         address_space(address_space),
         content_security_policy(content_security_policy),
+        cowl(cowl),
         first_party_for_cookies(first_party_for_cookies),
         requestor_origin(requestor_origin),
         requestor_origin_for_frame_loading(requestor_origin_for_frame_loading),
@@ -211,6 +213,7 @@ struct FrameFetchContext::FrozenState final
   const RefPtr<const SecurityOrigin> parent_security_origin;
   const Optional<WebAddressSpace> address_space;
   const Member<const ContentSecurityPolicy> content_security_policy;
+  const Member<const COWL> cowl;
   const KURL first_party_for_cookies;
   const RefPtr<SecurityOrigin> requestor_origin;
   const RefPtr<SecurityOrigin> requestor_origin_for_frame_loading;
@@ -220,7 +223,10 @@ struct FrameFetchContext::FrozenState final
   const bool is_main_frame;
   const bool is_svg_image_chrome_client;
 
-  DEFINE_INLINE_TRACE() { visitor->Trace(content_security_policy); }
+  DEFINE_INLINE_TRACE() {
+    visitor->Trace(content_security_policy);
+    visitor->Trace(cowl);
+    }
 };
 
 FrameFetchContext::FrameFetchContext(DocumentLoader* loader, Document* document)
@@ -1019,6 +1025,13 @@ const ContentSecurityPolicy* FrameFetchContext::GetContentSecurityPolicy()
   return document_ ? document_->GetContentSecurityPolicy() : nullptr;
 }
 
+const COWL* FrameFetchContext::GetCOWL()
+    const {
+  if (IsDetached())
+    return frozen_state_->cowl;
+  return document_ ? document_->GetCOWL() : nullptr;
+}
+
 void FrameFetchContext::AddConsoleMessage(ConsoleMessage* message) const {
   if (document_)
     document_->AddConsoleMessage(message);
@@ -1125,7 +1138,7 @@ FetchContext* FrameFetchContext::Detach() {
     frozen_state_ = new FrozenState(
         GetReferrerPolicy(), GetOutgoingReferrer(), Url(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
-        GetContentSecurityPolicy(), GetFirstPartyForCookies(),
+        GetContentSecurityPolicy(), GetCOWL(), GetFirstPartyForCookies(),
         GetRequestorOrigin(), GetRequestorOriginForFrameLoading(),
         GetClientHintsPreferences(), GetDevicePixelRatio(), GetUserAgent(),
         IsMainFrame(), IsSVGImageChromeClient());
@@ -1134,7 +1147,7 @@ FetchContext* FrameFetchContext::Detach() {
     frozen_state_ = new FrozenState(
         kReferrerPolicyDefault, String(), NullURL(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
-        GetContentSecurityPolicy(), GetFirstPartyForCookies(),
+        GetContentSecurityPolicy(), GetCOWL(), GetFirstPartyForCookies(),
         SecurityOrigin::CreateUnique(), SecurityOrigin::CreateUnique(),
         GetClientHintsPreferences(), GetDevicePixelRatio(), GetUserAgent(),
         IsMainFrame(), IsSVGImageChromeClient());

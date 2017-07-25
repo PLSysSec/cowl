@@ -21,13 +21,18 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CoreExport.h"
 #include "core/cowl/Label.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
+#include "platform/weborigin/SecurityViolationReportingPolicy.h"
 
 namespace blink {
 
+class ConsoleMessage;
 class ExecutionContext;
 class Privilege;
+class ResourceRequest;
 class SecurityOrigin;
 
 class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
@@ -36,8 +41,8 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
 
  public:
   static COWL* Create();
-
   ~COWL();
+  DECLARE_TRACE();
 
   static void enable(ScriptState*);
   static bool isEnabled(const ScriptState*);
@@ -58,11 +63,17 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
   static bool LabelRaiseWillResultInStuckContext(ScriptState*, Label*, Privilege*);
   static bool WriteCheck(ScriptState*, Label*, Label*);
 
-  Label* GetConfidentiality();
-  Label* GetIntegrity();
-  Privilege* GetPrivilege();
+  bool AllowRequest(const ResourceRequest&,
+                    SecurityViolationReportingPolicy =
+                    SecurityViolationReportingPolicy::kReport) const;
 
-  DECLARE_TRACE();
+  void LogToConsole(const String& message, MessageLevel = kErrorMessageLevel) const;
+  void LogToConsole(ConsoleMessage*, LocalFrame* = nullptr) const;
+
+  bool IsEnabled() const;
+  Label* GetConfidentiality() const;
+  Label* GetIntegrity() const;
+  Privilege* GetPrivilege() const;
 
  private:
   COWL();

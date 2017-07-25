@@ -32,6 +32,7 @@
 #define FrameFetchContext_h
 
 #include "core/CoreExport.h"
+#include "core/cowl/COWL.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/BaseFetchContext.h"
 #include "platform/heap/Handle.h"
@@ -208,6 +209,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   const SecurityOrigin* GetParentSecurityOrigin() const override;
   Optional<WebAddressSpace> GetAddressSpace() const override;
   const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
+  const COWL* GetCOWL() const override;
   void AddConsoleMessage(ConsoleMessage*) const override;
 
   ContentSettingsClient* GetContentSettingsClient() const;

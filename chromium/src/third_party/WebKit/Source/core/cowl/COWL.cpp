@@ -18,9 +18,12 @@
 #include "core/cowl/COWL.h"
 
 #include "core/cowl/Privilege.h"
+#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/inspector/ConsoleMessage.h"
+#include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
 namespace blink {
@@ -142,11 +145,51 @@ bool COWL::WriteCheck(ScriptState* script_state, Label* obj_conf, Label* obj_int
   return true;
 }
 
-Label* COWL::GetConfidentiality() { return confidentiality_; }
+bool COWL::AllowRequest(
+    const ResourceRequest& resource_request,
+    SecurityViolationReportingPolicy reporting_policy) const {
 
-Label* COWL::GetIntegrity() { return integrity_; }
+  if (!IsEnabled()) return true;
 
-Privilege* COWL::GetPrivilege() { return privilege_; }
+  RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(resource_request.Url());
+
+  Privilege* priv = GetPrivilege();
+  Label* effective_conf = GetConfidentiality()->Downgrade(priv);
+  Label* dst_conf = Label::Create(origin->ToString());
+  if (dst_conf->subsumes(effective_conf))
+    return true;
+
+  if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
+    String message =  "COWL::context labeled " + GetConfidentiality()->toString() +
+      " attempted to leak data to a remote server: " + origin->ToString();
+
+    LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
+                                        kErrorMessageLevel,
+                                        message));
+  }
+  return false;
+}
+
+void COWL::LogToConsole(const String& message,
+    MessageLevel level) const {
+  LogToConsole(ConsoleMessage::Create(kSecurityMessageSource, level, message));
+}
+
+void COWL::LogToConsole(ConsoleMessage* console_message,
+    LocalFrame* frame) const {
+  if (frame)
+    frame->GetDocument()->AddConsoleMessage(console_message);
+  else if (execution_context_)
+    execution_context_->AddConsoleMessage(console_message);
+}
+
+bool COWL::IsEnabled() const { return enabled_; }
+
+Label* COWL::GetConfidentiality() const { return confidentiality_; }
+
+Label* COWL::GetIntegrity() const { return integrity_; }
+
+Privilege* COWL::GetPrivilege() const { return privilege_; }
 
 DEFINE_TRACE(COWL) { 
   visitor->Trace(execution_context_);

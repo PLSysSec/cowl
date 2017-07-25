@@ -153,6 +153,20 @@ ResourceRequestBlockedReason BaseFetchContext::CheckCSPForRequest(
   return ResourceRequestBlockedReason::kNone;
 }
 
+ResourceRequestBlockedReason BaseFetchContext::CheckCOWLForRequest(
+    const ResourceRequest& resource_request,
+    const KURL& url,
+    const ResourceLoaderOptions& options,
+    SecurityViolationReportingPolicy reporting_policy,
+    ResourceRequest::RedirectStatus redirect_status) const {
+  const COWL* cowl = GetCOWL();
+  if (cowl && !cowl->AllowRequest(resource_request,
+                                  reporting_policy)) {
+    return ResourceRequestBlockedReason::COWL;
+  }
+  return ResourceRequestBlockedReason::kNone;
+}
+
 ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
     Resource::Type type,
     const ResourceRequest& resource_request,
@@ -224,6 +238,12 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
           ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
       ResourceRequestBlockedReason::CSP) {
     return ResourceRequestBlockedReason::CSP;
+  }
+  if (CheckCOWLForRequest(
+          resource_request, url, options, reporting_policy, redirect_status) ==
+      ResourceRequestBlockedReason::COWL) {
+
+    return ResourceRequestBlockedReason::COWL;
   }
 
   if (type == Resource::kScript || type == Resource::kImportResource) {

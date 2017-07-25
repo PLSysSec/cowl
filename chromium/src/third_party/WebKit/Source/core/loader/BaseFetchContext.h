@@ -6,6 +6,7 @@
 #define BaseFetchContext_h
 
 #include "core/CoreExport.h"
+#include "core/cowl/COWL.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "platform/heap/Handle.h"
@@ -80,6 +81,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual const SecurityOrigin* GetParentSecurityOrigin() const = 0;
   virtual Optional<WebAddressSpace> GetAddressSpace() const = 0;
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
+  virtual const COWL* GetCOWL() const = 0;
   virtual void AddConsoleMessage(ConsoleMessage*) const = 0;
   using FetchContext::AddConsoleMessage;
 
@@ -93,6 +95,13 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       SecurityViolationReportingPolicy,
       ResourceRequest::RedirectStatus,
       ContentSecurityPolicy::CheckHeaderType) const;
+
+  ResourceRequestBlockedReason CheckCOWLForRequest(
+      const ResourceRequest&,
+      const KURL&,
+      const ResourceLoaderOptions&,
+      SecurityViolationReportingPolicy,
+      ResourceRequest::RedirectStatus) const;
 
   // Utility methods that are used in default implement for CanRequest,
   // CanFollowRedirect and AllowResponse.
