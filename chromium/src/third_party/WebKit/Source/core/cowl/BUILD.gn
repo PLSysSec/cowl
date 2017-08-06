@@ -8,6 +8,8 @@ blink_core_sources("cowl") {
   sources = [
     "COWL.cpp",
     "COWL.h",
+    "COWLParser.cpp",
+    "COWLParser.h",
     "Label.cpp",
     "Label.h",
     "LabeledObject.cpp",

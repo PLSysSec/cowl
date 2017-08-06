@@ -1195,6 +1195,7 @@ source_set("unit_tests") {
     "animation/TimingInputTest.cpp",
     "clipboard/DataObjectTest.cpp",
     "clipboard/DataTransferTest.cpp",
+    "cowl/COWLParserTest.cpp",
     "css/ActiveStyleSheetsTest.cpp",
     "css/AffectedByPseudoTest.cpp",
     "css/CSSCalculationValueTest.cpp",
