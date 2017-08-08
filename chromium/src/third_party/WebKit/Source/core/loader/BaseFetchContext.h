@@ -6,9 +6,9 @@
 #define BaseFetchContext_h
 
 #include "core/CoreExport.h"
-#include "core/cowl/COWL.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/cowl/COWL.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/ResourceRequest.h"

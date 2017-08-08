@@ -129,9 +129,9 @@ Label* COWLParser::ParseLabelExpression(const String& principal, const String& s
       prin.Ensure16Bit();
 
       if (!or_exp)
-        or_exp = Label::Create(prin);
+        or_exp = Label::Create(prin, ASSERT_NO_EXCEPTION);
       else
-        or_exp = or_exp->or_(prin);
+        or_exp = or_exp->or_(prin, ASSERT_NO_EXCEPTION);
 
       if (!or_exp)
         return nullptr;

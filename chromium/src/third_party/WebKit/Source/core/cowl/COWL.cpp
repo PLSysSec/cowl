@@ -155,7 +155,11 @@ bool COWL::AllowRequest(
 
   Privilege* priv = GetPrivilege();
   Label* effective_conf = GetConfidentiality()->Downgrade(priv);
-  Label* dst_conf = Label::Create(origin->ToString());
+  Label* dst_conf = Label::Create(origin->ToString(), ASSERT_NO_EXCEPTION);
+  // TODO: is this ok?
+  if (!dst_conf)
+    return false;
+
   if (dst_conf->subsumes(effective_conf))
     return true;
 

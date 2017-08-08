@@ -19,6 +19,7 @@
 #define Label_h
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/CoreExport.h"
 #include "core/cowl/COWLPrincipal.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
@@ -31,24 +32,24 @@ class Privilege;
 typedef Vector<COWLPrincipal> DisjunctionSet;
 typedef Vector<DisjunctionSet> DisjunctionSetArray;
 
-class Label final : public GarbageCollectedFinalized<Label>,
-                    public ScriptWrappable {
+class CORE_EXPORT Label final : public GarbageCollectedFinalized<Label>,
+                                public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static Label* Create();
-  static Label* Create (const String& principal);
+  static Label* Create(ExceptionState& = ASSERT_NO_EXCEPTION);
+  static Label* Create(const String& principal, ExceptionState&);
   bool equals(Label*) const;
   bool subsumes(Label*) const;
   bool subsumes(Label*, Privilege*) const;
-  Label* and_(const String& principal) const;
+  Label* and_(const String& principal, ExceptionState&) const;
   Label* and_(Label*) const;
-  Label* or_(const String& principal) const;
+  Label* or_(const String& principal, ExceptionState&) const;
   Label* or_(Label*) const;
   String toString() const;
 
   // Helper functions
-  static Label* Create (const DisjunctionSetArray);
+  static Label* Create(const DisjunctionSetArray);
   void InternalAnd(DisjunctionSet&, bool clone = false);
   void InternalOr(DisjunctionSet&);
   bool IsEmpty() const;

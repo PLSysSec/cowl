@@ -19,6 +19,7 @@
 #define Privilege_h
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/CoreExport.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -27,13 +28,14 @@ namespace blink {
 
 class Label;
 
-class Privilege final : public GarbageCollectedFinalized<Privilege>,
-                        public ScriptWrappable {
+class CORE_EXPORT Privilege final : public GarbageCollectedFinalized<Privilege>,
+                                    public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static Privilege* Create();
-  static Privilege* Create(String);
+  static Privilege* Create(const String&);
+  static Privilege* Create(Label*);
   static Privilege* CreateForJSConstructor();
   Label* asLabel() const;
   Privilege* combine(Privilege*) const;

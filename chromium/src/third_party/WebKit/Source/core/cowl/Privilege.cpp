@@ -26,16 +26,24 @@ Privilege* Privilege::Create() {
   return new Privilege();
 }
 
-Privilege* Privilege::Create(String priv) {
-  Label* label = Label::Create(priv);
+Privilege* Privilege::Create(const String& principal) {
+  Label* label = Label::Create(principal, ASSERT_NO_EXCEPTION);
+  if (!label)
+    return Create();;
+  return new Privilege(label);
+}
+
+Privilege* Privilege::Create(Label* label) {
+  if (!label)
+    return Create();
   return new Privilege(label);
 }
 
 Privilege* Privilege::CreateForJSConstructor() {
   String uuid = "unique:";
   uuid.append(CreateCanonicalUUIDString());
-  Label* label = Label::Create(uuid);
-  return new Privilege(label);
+  Label* label = Label::Create(uuid, ASSERT_NO_EXCEPTION);
+  return Create(label);
 }
 
 Privilege::Privilege() {

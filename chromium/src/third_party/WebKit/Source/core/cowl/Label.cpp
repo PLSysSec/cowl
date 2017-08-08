@@ -19,22 +19,26 @@
 
 #include <algorithm>
 #include <iterator>
+#include "core/cowl/COWLParser.h"
 #include "core/cowl/Privilege.h"
 
 namespace blink {
 
-Label* Label::Create() {
+Label* Label::Create(ExceptionState& exception_state) {
   return new Label();
 }
 
-Label* Label::Create(const String& principal) {
-  Label* label = Label::Create();
+Label* Label::Create(const String& principal, ExceptionState& exception_state) {
+  COWLPrincipalType principal_type = COWLParser::ValidatePrincipal(principal);
 
-  COWLPrincipal new_principal = COWLPrincipal(
-      principal,
-      COWLPrincipalType::kOriginPrincipal);
+  if (principal_type == COWLPrincipalType::kInvalidPrincipal) {
+    exception_state.ThrowTypeError("Invalid principal");
+    return nullptr;
+  }
+  COWLPrincipal new_principal = COWLPrincipal(principal, principal_type);
   DisjunctionSet role = DisjunctionSetUtils::ConstructDset(new_principal);
 
+  Label* label = Label::Create();
   label->roles_.push_back(role);
   return label;
 }
@@ -99,15 +103,11 @@ bool Label::subsumes(Label* other, Privilege* priv) const {
   return and_(priv->asLabel())->subsumes(other);
 }
 
-Label* Label::and_(const String& principal) const {
-  COWLPrincipal new_principal = COWLPrincipal(
-      principal,
-      COWLPrincipalType::kOriginPrincipal);
-  DisjunctionSet new_dset = DisjunctionSetUtils::ConstructDset(new_principal);
-
-  Label* _this = Clone();
-  _this->InternalAnd(new_dset, true);
-  return _this;
+Label* Label::and_(const String& principal, ExceptionState& exception_state) const {
+  Label* label = Create(principal, exception_state);
+  if (!label)
+    return nullptr;
+  return and_(label);
 }
 
 Label* Label::and_(Label* label) const {
@@ -120,20 +120,14 @@ Label* Label::and_(Label* label) const {
   return _this;
 }
 
-Label* Label::or_(const String& principal) const {
+Label* Label::or_(const String& principal, ExceptionState& exception_state) const {
   if (IsEmpty())
     return nullptr;
 
-  Label* _this = Clone();
-
-  COWLPrincipal new_principal = COWLPrincipal(
-      principal,
-      COWLPrincipalType::kOriginPrincipal);
-  DisjunctionSet new_dset = DisjunctionSetUtils::ConstructDset(new_principal);
-
-  _this->InternalOr(new_dset);
-
-  return _this;
+  Label* label = Create(principal, exception_state);
+  if (!label)
+    return nullptr;
+  return or_(label);
 }
 
 Label* Label::or_(Label* label) const {
