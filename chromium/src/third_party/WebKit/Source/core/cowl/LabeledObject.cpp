@@ -24,21 +24,22 @@
 namespace blink {
 
 LabeledObject* LabeledObject::Create(ScriptState* script_state, ScriptValue obj, CILabel& labels, ExceptionState& exception_state) {
-  COWL::enable(script_state);
+  COWL* cowl = ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL();
+  cowl->Enable();
 
   Label* confidentiality;
   if (labels.hasConfidentiality())
     confidentiality = labels.confidentiality();
   else
-    confidentiality = COWL::confidentiality(script_state);
+    confidentiality = cowl->GetConfidentiality();
 
   Label* integrity;
   if (labels.hasIntegrity())
     integrity = labels.integrity();
   else
-    integrity = COWL::integrity(script_state);
+    integrity = cowl->GetIntegrity();
 
-  if (!COWL::WriteCheck(script_state, confidentiality, integrity)) {
+  if (!cowl->WriteCheck(confidentiality, integrity)) {
     exception_state.ThrowSecurityError("Label of blob is not above current label or below current clearance.");
     return nullptr;
   }
@@ -63,26 +64,26 @@ Label* LabeledObject::integrity() {
 }
 
 ScriptValue LabeledObject::protectedObject(ScriptState* script_state, ExceptionState& exception_state) {
-  COWL::enable(script_state);
+  COWL* cowl = ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL();
+  cowl->Enable();
 
-  Privilege* priv = COWL::privilege(script_state);
+  Privilege* priv = cowl->GetPrivilege();
 
-  Label* curr_conf = COWL::confidentiality(script_state);
+  Label* curr_conf = cowl->GetConfidentiality();
   Label* tmp_conf = curr_conf->and_(confidentiality_);
   Label* new_conf = tmp_conf->Downgrade(priv);
 
-  if (COWL::LabelRaiseWillResultInStuckContext(script_state, new_conf, priv)) {
+  if (cowl->LabelRaiseWillResultInStuckContext(new_conf, priv)) {
     exception_state.ThrowSecurityError("SecurityError: Will result in stuck-context, please use an iFrame");
     return ScriptValue::CreateNull(script_state);
   }
+  cowl->SetConfidentiality(new_conf);
 
-  COWL::setConfidentiality(script_state, new_conf, exception_state);
-
-  Label* curr_integrity = COWL::integrity(script_state);
+  Label* curr_integrity = cowl->GetIntegrity();
   Label* tmp_integrity = curr_integrity->or_(integrity_);
   Label* new_integrity = tmp_integrity->Downgrade(priv);
 
-  COWL::setIntegrity(script_state, new_integrity, exception_state);
+  cowl->SetIntegrity(new_integrity);
 
   ScriptValue obj_clone =  StructuredClone(script_state, obj_, exception_state);
   return obj_clone;
@@ -101,7 +102,8 @@ LabeledObject* LabeledObject::clone(ScriptState* script_state, CILabel& labels, 
   else
     new_int = integrity_;
 
-  Privilege* priv = COWL::privilege(script_state);
+  COWL* cowl = ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL();
+  Privilege* priv = cowl->GetPrivilege();
 
   if (!new_conf->subsumes(confidentiality_, priv)) {
     exception_state.ThrowSecurityError("SecurityError: Confidentiality label needs to be more restrictive");
@@ -119,17 +121,17 @@ LabeledObject* LabeledObject::clone(ScriptState* script_state, CILabel& labels, 
   return Create(script_state, obj_, new_labels, exception_state);
 }
 
-// Helper functions
-
 ScriptValue LabeledObject::GetObj() { return obj_; }
 
-ScriptValue LabeledObject::StructuredClone(ScriptState* script_state, ScriptValue obj, ExceptionState& exception_state) {
+ScriptValue LabeledObject::StructuredClone(ScriptState* script_state,
+                                           ScriptValue obj,
+                                           ExceptionState& exception_state) {
   v8::Isolate* isolate = script_state->GetIsolate();
   v8::Local<v8::Value> value = obj.V8Value();
   RefPtr<SerializedScriptValue> serialized =
-    SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
+                                SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
   v8::Local<v8::Value> result = serialized->Deserialize(isolate);
-  // If there's a problem during deserialization, it results in null
+  // If there's a problem during deserialization, result would be null
   if (result->IsNull()) {
     exception_state.ThrowDOMException(kDataCloneError, "Object cannot be serialized");
     return ScriptValue::CreateNull(script_state);

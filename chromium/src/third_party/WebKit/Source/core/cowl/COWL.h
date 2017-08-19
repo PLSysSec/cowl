@@ -18,12 +18,12 @@
 #ifndef COWL_h
 #define COWL_h
 
-#include "bindings/core/v8/ExceptionState.h"
 #include "core/CoreExport.h"
+#include "core/cowl/COWLParser.h"
 #include "core/cowl/Label.h"
+#include "core/cowl/Privilege.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/inspector/ConsoleTypes.h"
-#include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 
@@ -31,37 +31,22 @@ namespace blink {
 
 class ConsoleMessage;
 class ExecutionContext;
-class Privilege;
 class ResourceRequest;
 class SecurityOrigin;
 
-class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
-                               public ScriptWrappable {
-  DEFINE_WRAPPERTYPEINFO();
+class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL> {
 
  public:
   static COWL* Create();
   ~COWL();
   DECLARE_TRACE();
 
-  static void enable(ScriptState*);
-  static bool isEnabled(const ScriptState*);
-
-  static Label* confidentiality(const ScriptState*);
-  static void setConfidentiality(ScriptState*, Label*, ExceptionState&);
-
-  static Label* integrity(const ScriptState*);
-  static void setIntegrity(ScriptState*, Label*, ExceptionState&);
-
-  static Privilege* privilege(const ScriptState*);
-  static void setPrivilege(ScriptState*, Privilege*, ExceptionState&);
-
   void BindToExecutionContext(ExecutionContext*);
   void SetupSelf(const SecurityOrigin&);
   void ApplyPolicySideEffectsToExecutionContext();
 
-  static bool LabelRaiseWillResultInStuckContext(ScriptState*, Label*, Privilege*);
-  static bool WriteCheck(ScriptState*, Label*, Label*);
+  bool LabelRaiseWillResultInStuckContext(Label*, Privilege*);
+  bool WriteCheck(Label*, Label*);
 
   bool AllowRequest(const ResourceRequest&,
                     SecurityViolationReportingPolicy =
@@ -75,14 +60,21 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL>,
   Label* GetIntegrity() const;
   Privilege* GetPrivilege() const;
 
+  // TODO: make these private and COWLInterface a friend?
+  void Enable();
+  void SetConfidentiality(Label*);
+  void SetIntegrity(Label*);
+  void SetPrivilege(Privilege*);
+
  private:
   COWL();
 
   bool enabled_;
-  Member<ExecutionContext> execution_context_;
   Member<Label> confidentiality_;
   Member<Label> integrity_;
   Member<Privilege> privilege_;
+
+  Member<ExecutionContext> execution_context_;
 };
 
 }  // namespace blink

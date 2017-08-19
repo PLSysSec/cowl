@@ -17,7 +17,6 @@
 
 #include "core/cowl/COWL.h"
 
-#include "core/cowl/Privilege.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
@@ -25,6 +24,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
@@ -32,72 +32,12 @@ COWL* COWL::Create() { return new COWL(); }
 
 COWL::COWL()
   : enabled_(false),
-    execution_context_(nullptr),
     confidentiality_(nullptr),
     integrity_(nullptr),
-    privilege_(nullptr) {}
+    privilege_(nullptr),
+    execution_context_(nullptr) {}
 
 COWL::~COWL() {}
-
-void COWL::enable(ScriptState* script_state) {
-  ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->enabled_ = true;
-}
-
-bool COWL::isEnabled(const ScriptState* script_state) {
-  return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->enabled_;
-}
-
-Label* COWL::confidentiality(const ScriptState* script_state) {
-  return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->confidentiality_;
-}
-
-void COWL::setConfidentiality(ScriptState* script_state, Label* label, ExceptionState& exception_state) {
-  enable(script_state);
-
-  Label* current_label = confidentiality(script_state);
-  Privilege* priv = privilege(script_state);
-  if (!label->subsumes(current_label, priv)) {
-    exception_state.ThrowSecurityError("Label is not above the current label.");
-    return;
-  }
-  if (LabelRaiseWillResultInStuckContext(script_state, label, priv)) {
-    exception_state.ThrowSecurityError("Sorry cant do that, create a frame.");
-    return;
-  }
-  ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->confidentiality_ = label;
-}
-
-Label* COWL::integrity(const ScriptState* script_state) {
-  return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->integrity_;
-}
-
-void COWL::setIntegrity(ScriptState* script_state, Label* label, ExceptionState& exception_state) {
-  enable(script_state);
-
-  Label* current_label = integrity(script_state);
-  Privilege* priv = privilege(script_state);
-  if (!current_label->subsumes(label, priv)) {
-    exception_state.ThrowSecurityError("Label is not below the current label.");
-    return;
-  }
-  ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->integrity_ = label;
-}
-
-Privilege* COWL::privilege(const ScriptState* script_state) {
-  return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->privilege_;
-}
-
-void COWL::setPrivilege(ScriptState* script_state, Privilege* priv, ExceptionState& exception_state) {
-  enable(script_state);
-
-  Label* current_label = confidentiality(script_state);
-  if (LabelRaiseWillResultInStuckContext(script_state, current_label, priv)) {
-    exception_state.ThrowSecurityError("Sorry cant do that, create a frame.");
-    return;
-  }
-
-  ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL()->privilege_ = priv;
-}
 
 void COWL::BindToExecutionContext(ExecutionContext* execution_context) {
   execution_context_ = execution_context;
@@ -117,27 +57,23 @@ void COWL::ApplyPolicySideEffectsToExecutionContext() {
   SetupSelf(*execution_context_->GetSecurityContext().GetSecurityOrigin());
 }
 
-bool COWL::LabelRaiseWillResultInStuckContext(ScriptState* script_state,
-                                              Label* confidentiality,
-                                              Privilege* priv) {
-  LocalFrame* frame = ExecutionContext::From(script_state)->ExecutingWindow()->GetFrame();
+bool COWL::LabelRaiseWillResultInStuckContext(Label* conf, Privilege* priv) {
+  LocalFrame* frame = execution_context_->ExecutingWindow()->GetFrame();
   if (!frame)
     return false;
 
-  // If |document|'s browsing context is not a top-level browsing context, then
-  // return false.
+  // If |document|'s browsing context is not a top-level browsing context, then return false.
   if (!frame->IsMainFrame())
     return false;
 
-  Label* effective_label = confidentiality->Downgrade(priv);
-
+  Label* effective_label = conf->Downgrade(priv);
   return !effective_label->IsEmpty();
 }
 
-bool COWL::WriteCheck(ScriptState* script_state, Label* obj_conf, Label* obj_int) {
-  Privilege* priv = privilege(script_state);
-  Label* current_conf = confidentiality(script_state)->Downgrade(priv);
-  Label* current_int = integrity(script_state)->Upgrade(priv);
+bool COWL::WriteCheck(Label* obj_conf, Label* obj_int) {
+  Privilege* priv = privilege_;
+  Label* current_conf = confidentiality_->Downgrade(priv);
+  Label* current_int = integrity_->Upgrade(priv);
 
   if (!obj_conf->subsumes(current_conf) || !current_int->subsumes(obj_int))
     return false;
@@ -146,17 +82,16 @@ bool COWL::WriteCheck(ScriptState* script_state, Label* obj_conf, Label* obj_int
 }
 
 bool COWL::AllowRequest(
-    const ResourceRequest& resource_request,
+    const ResourceRequest& request,
     SecurityViolationReportingPolicy reporting_policy) const {
 
   if (!IsEnabled()) return true;
 
-  RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(resource_request.Url());
+  RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(request.Url());
 
-  Privilege* priv = GetPrivilege();
-  Label* effective_conf = GetConfidentiality()->Downgrade(priv);
+  Label* effective_conf = confidentiality_->Downgrade(privilege_);
   Label* dst_conf = Label::Create(origin->ToString(), ASSERT_NO_EXCEPTION);
-  // TODO: is this ok?
+  // TODO: dst_conf is nullptr when origin is not valid principal. is this ok?
   if (!dst_conf)
     return false;
 
@@ -188,18 +123,20 @@ void COWL::LogToConsole(ConsoleMessage* console_message,
 }
 
 bool COWL::IsEnabled() const { return enabled_; }
-
 Label* COWL::GetConfidentiality() const { return confidentiality_; }
-
 Label* COWL::GetIntegrity() const { return integrity_; }
-
 Privilege* COWL::GetPrivilege() const { return privilege_; }
 
+void COWL::Enable() { enabled_ = true; }
+void COWL::SetConfidentiality(Label* label) { confidentiality_ = label; }
+void COWL::SetIntegrity(Label* label) { integrity_ = label; }
+void COWL::SetPrivilege(Privilege* priv) { privilege_ = priv; }
+
 DEFINE_TRACE(COWL) { 
-  visitor->Trace(execution_context_);
   visitor->Trace(confidentiality_);
   visitor->Trace(integrity_);
   visitor->Trace(privilege_);
+  visitor->Trace(execution_context_);
 }
 
 }  // namespace blink
