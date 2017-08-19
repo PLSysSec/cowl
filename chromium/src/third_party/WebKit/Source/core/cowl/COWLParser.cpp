@@ -51,7 +51,7 @@ static bool IsAppPrincipal(String principal) {
     if (start == end)
       return false;
 
-    skipWhile<UChar, IsHostCharacter>(start, end);
+    SkipWhile<UChar, IsHostCharacter>(start, end);
 
     if (start == end)
       return true;

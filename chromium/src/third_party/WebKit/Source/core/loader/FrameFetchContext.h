@@ -63,6 +63,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
     auto* context = new FrameFetchContext(loader, nullptr);
     return ResourceFetcher::Create(context, context->GetTaskRunner());
   }
+  // Used for creating a FrameFetchContext for an imported Document.
+  // |document_loader_| will be set to nullptr.
   static ResourceFetcher* CreateFetcherFromDocument(Document* document) {
     auto* context = new FrameFetchContext(nullptr, document);
     return ResourceFetcher::Create(context, context->GetTaskRunner());
@@ -134,16 +136,12 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   bool PageDismissalEventBeingDispatched() const override;
   bool UpdateTimingInfoForIFrameNavigation(ResourceTimingInfo*) override;
   void SendImagePing(const KURL&) override;
-  void AddConsoleMessage(const String&,
-                         LogMessageType = kLogErrorMessage) const override;
+
   SecurityOrigin* GetSecurityOrigin() const override;
 
-  void PopulateResourceRequest(const KURL&,
-                               Resource::Type,
+  void PopulateResourceRequest(Resource::Type,
                                const ClientHintsPreferences&,
                                const FetchParameters::ResourceWidth&,
-                               const ResourceLoaderOptions&,
-                               SecurityViolationReportingPolicy,
                                ResourceRequest&) override;
   void SetFirstPartyCookieAndRequestorOrigin(ResourceRequest&) override;
 
@@ -152,7 +150,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void AddClientHintsIfNecessary(const ClientHintsPreferences&,
                                  const FetchParameters::ResourceWidth&,
                                  ResourceRequest&);
-  static float ClientHintsDeviceRAM(int64_t physical_memory_mb);
+  static float ClientHintsDeviceMemory(int64_t physical_memory_mb);
 
   MHTMLArchive* Archive() const override;
 
@@ -170,10 +168,9 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   FrameFetchContext(DocumentLoader*, Document*);
 
-  // m_documentLoader is null when loading resources from an HTML import
-  // and in such cases we use the document loader of the importing frame.
   // Convenient accessors below can be used to transparently access the
   // relevant document loader or frame in either cases without null-checks.
+  //
   // TODO(kinuko): Remove constness, these return non-const members.
   DocumentLoader* MasterDocumentLoader() const;
   LocalFrame* GetFrame() const;
@@ -188,7 +185,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   KURL GetFirstPartyForCookies() const override;
   bool AllowScriptFromSource(const KURL&) const override;
   SubresourceFilter* GetSubresourceFilter() const override;
-  bool ShouldBlockRequestByInspector(const ResourceRequest&) const override;
+  bool ShouldBlockRequestByInspector(const KURL&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason) const override;
@@ -197,7 +194,9 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void CountUsage(WebFeature) const override;
   void CountDeprecation(WebFeature) const override;
   bool ShouldBlockFetchByMixedContentCheck(
-      const ResourceRequest&,
+      WebURLRequest::RequestContext,
+      WebURLRequest::FrameType,
+      ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const override;
   bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
@@ -221,6 +220,10 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   float GetDevicePixelRatio() const;
   bool ShouldSendClientHint(WebClientHintsType,
                             const ClientHintsPreferences&) const;
+  // Checks if the origin requested persisting the client hints, and notifies
+  // the |ContentSettingsClient| with the list of client hints and the
+  // persistence duration.
+  void ParseAndPersistClientHints(const ResourceResponse&);
 
   Member<DocumentLoader> document_loader_;
   Member<Document> document_;

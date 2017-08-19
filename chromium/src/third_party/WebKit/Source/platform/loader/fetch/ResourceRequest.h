@@ -45,8 +45,8 @@
 namespace blink {
 
 enum class ResourceRequestBlockedReason {
-  CSP,
-  COWL,
+  kCSP,
+  kCOWL,
   kMixedContent,
   kOrigin,
   kInspector,
@@ -95,7 +95,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   std::unique_ptr<CrossThreadResourceRequestData> CopyData() const;
 
   bool IsNull() const;
-  bool IsEmpty() const;
 
   const KURL& Url() const;
   void SetURL(const KURL&);
@@ -142,9 +141,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   const AtomicString& HttpOrigin() const {
     return HttpHeaderField(HTTPNames::Origin);
   }
-  const AtomicString& HttpSuborigin() const {
-    return HttpHeaderField(HTTPNames::Suborigin);
-  }
   // Note that these will also set and clear, respectively, the
   // Suborigin header, if appropriate.
   void SetHTTPOrigin(const SecurityOrigin*);
@@ -153,9 +149,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   void AddHTTPOriginIfNeeded(const SecurityOrigin*);
   void AddHTTPOriginIfNeeded(const String&);
 
-  const AtomicString& HttpUserAgent() const {
-    return HttpHeaderField(HTTPNames::User_Agent);
-  }
   void SetHTTPUserAgent(const AtomicString& http_user_agent) {
     SetHTTPHeaderField(HTTPNames::User_Agent, http_user_agent);
   }
@@ -242,7 +235,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
 
   // True if corresponding AppCache group should be resetted.
-  bool ShouldResetAppCache() { return should_reset_app_cache_; }
+  bool ShouldResetAppCache() const { return should_reset_app_cache_; }
   void SetShouldResetAppCache(bool should_reset_app_cache) {
     should_reset_app_cache_ = should_reset_app_cache;
   }
@@ -284,6 +277,11 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
   void SetFetchRedirectMode(WebURLRequest::FetchRedirectMode redirect) {
     fetch_redirect_mode_ = redirect;
+  }
+
+  const String& GetFetchIntegrity() const { return fetch_integrity_; }
+  void SetFetchIntegrity(const String& integrity) {
+    fetch_integrity_ = integrity;
   }
 
   WebURLRequest::PreviewsState GetPreviewsState() const {
@@ -375,6 +373,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   WebURLRequest::FetchRequestMode fetch_request_mode_;
   WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
   WebURLRequest::FetchRedirectMode fetch_redirect_mode_;
+  String fetch_integrity_;
   ReferrerPolicy referrer_policy_;
   bool did_set_http_referrer_;
   bool check_for_browser_side_navigation_;
@@ -435,6 +434,7 @@ struct CrossThreadResourceRequestData {
   WebURLRequest::FetchRequestMode fetch_request_mode_;
   WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
   WebURLRequest::FetchRedirectMode fetch_redirect_mode_;
+  String fetch_integrity_;
   WebURLRequest::PreviewsState previews_state_;
   ReferrerPolicy referrer_policy_;
   bool did_set_http_referrer_;

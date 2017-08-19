@@ -150,7 +150,7 @@ class InspectorFileReaderLoaderClient final : public FileReaderLoaderClient {
 
  public:
   InspectorFileReaderLoaderClient(
-      PassRefPtr<BlobDataHandle> blob,
+      RefPtr<BlobDataHandle> blob,
       const String& mime_type,
       const String& text_encoding_name,
       std::unique_ptr<GetResponseBodyCallback> callback)
@@ -248,9 +248,9 @@ String ResourcePriorityJSON(ResourceLoadPriority priority) {
 
 String BuildBlockedReason(ResourceRequestBlockedReason reason) {
   switch (reason) {
-    case ResourceRequestBlockedReason::CSP:
+    case ResourceRequestBlockedReason::kCSP:
       return protocol::Network::BlockedReasonEnum::Csp;
-    case ResourceRequestBlockedReason::COWL:
+    case ResourceRequestBlockedReason::kCOWL:
       return protocol::Network::BlockedReasonEnum::Other;
     case ResourceRequestBlockedReason::kMixedContent:
       return protocol::Network::BlockedReasonEnum::MixedContent;
@@ -562,17 +562,16 @@ DEFINE_TRACE(InspectorNetworkAgent) {
   InspectorBaseAgent::Trace(visitor);
 }
 
-void InspectorNetworkAgent::ShouldBlockRequest(const ResourceRequest& request,
-                                               bool* result) {
+void InspectorNetworkAgent::ShouldBlockRequest(const KURL& url, bool* result) {
   protocol::DictionaryValue* blocked_urls =
       state_->getObject(NetworkAgentState::kBlockedURLs);
   if (!blocked_urls)
     return;
 
-  String url = request.Url().GetString();
+  String url_string = url.GetString();
   for (size_t i = 0; i < blocked_urls->size(); ++i) {
     auto entry = blocked_urls->at(i);
-    if (Matches(url, entry.first)) {
+    if (Matches(url_string, entry.first)) {
       *result = true;
       return;
     }
@@ -942,7 +941,7 @@ void InspectorNetworkAgent::WillLoadXHR(XMLHttpRequest* xhr,
                                         const AtomicString& method,
                                         const KURL& url,
                                         bool async,
-                                        PassRefPtr<EncodedFormData> form_data,
+                                        RefPtr<EncodedFormData> form_data,
                                         const HTTPHeaderMap& headers,
                                         bool include_credentials) {
   DCHECK(xhr);
@@ -1496,7 +1495,7 @@ void InspectorNetworkAgent::DidCommitLoad(LocalFrame* frame,
 }
 
 void InspectorNetworkAgent::FrameScheduledNavigation(LocalFrame* frame,
-                                                     double) {
+                                                     ScheduledNavigation*) {
   String frame_id = IdentifiersFactory::FrameId(frame);
   frames_with_scheduled_navigation_.insert(frame_id);
   if (!frames_with_scheduled_client_navigation_.Contains(frame_id)) {

@@ -152,7 +152,7 @@ bool DOMWindow::IsInsecureScriptAccess(LocalDOMWindow& calling_window,
   return true;
 }
 
-void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
+void DOMWindow::postMessage(RefPtr<SerializedScriptValue> message,
                             const MessagePortArray& ports,
                             const String& target_origin,
                             LocalDOMWindow* source,
@@ -374,7 +374,7 @@ String DOMWindow::CrossDomainAccessErrorMessage(
   return message + "Protocols, domains, and ports must match.";
 }
 
-void DOMWindow::close(ExecutionContext* context) {
+void DOMWindow::close(LocalDOMWindow* incumbent_window) {
   if (!GetFrame() || !GetFrame()->IsMainFrame())
     return;
 
@@ -383,9 +383,9 @@ void DOMWindow::close(ExecutionContext* context) {
     return;
 
   Document* active_document = nullptr;
-  if (context) {
+  if (incumbent_window) {
     DCHECK(IsMainThread());
-    active_document = ToDocument(context);
+    active_document = incumbent_window->document();
     if (!active_document)
       return;
 
@@ -412,7 +412,11 @@ void DOMWindow::close(ExecutionContext* context) {
   if (!GetFrame()->ShouldClose())
     return;
 
-  probe::breakableLocation(context, "DOMWindow.close");
+  ExecutionContext* execution_context = nullptr;
+  if (IsLocalDOMWindow()) {
+    execution_context = blink::ToLocalDOMWindow(this)->GetExecutionContext();
+  }
+  probe::breakableLocation(execution_context, "DOMWindow.close");
 
   page->CloseSoon();
 
@@ -423,7 +427,7 @@ void DOMWindow::close(ExecutionContext* context) {
   window_is_closing_ = true;
 }
 
-void DOMWindow::focus(ExecutionContext* context) {
+void DOMWindow::focus(LocalDOMWindow* incumbent_window) {
   if (!GetFrame())
     return;
 
@@ -431,15 +435,18 @@ void DOMWindow::focus(ExecutionContext* context) {
   if (!page)
     return;
 
-  DCHECK(context);
+  DCHECK(incumbent_window);
+  ExecutionContext* incumbent_execution_context =
+      incumbent_window->GetExecutionContext();
 
-  bool allow_focus = context->IsWindowInteractionAllowed();
+  bool allow_focus = incumbent_execution_context->IsWindowInteractionAllowed();
   if (allow_focus) {
-    context->ConsumeWindowInteraction();
+    incumbent_execution_context->ConsumeWindowInteraction();
   } else {
     DCHECK(IsMainThread());
-    allow_focus = opener() && (opener() != this) &&
-                  (ToDocument(context)->domWindow() == opener());
+    allow_focus =
+        opener() && (opener() != this) &&
+        (ToDocument(incumbent_execution_context)->domWindow() == opener());
   }
 
   // If we're a top level window, bring the window to the front.

@@ -31,6 +31,9 @@
 #define Document_h
 
 #include <memory>
+#include <string>
+#include <utility>
+
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
@@ -64,7 +67,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 
@@ -261,8 +264,11 @@ class CORE_EXPORT Document : public ContainerNode,
   USING_GARBAGE_COLLECTED_MIXIN(Document);
 
  public:
-  static Document* Create(const DocumentInit& initializer = DocumentInit()) {
-    return new Document(initializer);
+  static Document* Create(const DocumentInit& init) {
+    return new Document(init);
+  }
+  static Document* CreateForTest() {
+    return new Document(DocumentInit::Create());
   }
   // Factory for web-exposed Document constructor. The argument document must be
   // a document instance representing window.document, and it works as the
@@ -515,8 +521,8 @@ class CORE_EXPORT Document : public ContainerNode,
   void UpdateStyleAndLayoutIgnorePendingStylesheets(
       RunPostLayoutTasks = kRunPostLayoutTasksAsyhnchronously);
   void UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(Node*);
-  PassRefPtr<ComputedStyle> StyleForElementIgnoringPendingStylesheets(Element*);
-  PassRefPtr<ComputedStyle> StyleForPage(int page_index);
+  RefPtr<ComputedStyle> StyleForElementIgnoringPendingStylesheets(Element*);
+  RefPtr<ComputedStyle> StyleForPage(int page_index);
 
   // Ensures that location-based data will be valid for a given node.
   //
@@ -618,10 +624,13 @@ class CORE_EXPORT Document : public ContainerNode,
   void SetURL(const KURL&);
 
   // Bind the url to document.url, if unavailable bind to about:blank.
-  KURL urlForBinding();
+  KURL urlForBinding() const;
 
   // To understand how these concepts relate to one another, please see the
   // comments surrounding their declaration.
+
+  // Document base URL.
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-url
   const KURL& BaseURL() const;
   void SetBaseURLOverride(const KURL&);
   const KURL& BaseURLOverride() const { return base_url_override_; }
@@ -629,20 +638,17 @@ class CORE_EXPORT Document : public ContainerNode,
   const AtomicString& BaseTarget() const { return base_target_; }
   void ProcessBaseElement();
 
+  // Fallback base URL.
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#fallback-base-url
+  KURL FallbackBaseURL() const;
+
   // Creates URL based on passed relative url and this documents base URL.
   // Depending on base URL value it is possible that parent document
-  // base URL will be used instead. Uses completeURLWithOverride internally.
+  // base URL will be used instead. Uses CompleteURLWithOverride internally.
   KURL CompleteURL(const String&) const;
   // Creates URL based on passed relative url and passed base URL override.
-  // Depending on baseURLOverride value it is possible that parent document
-  // base URL will be used instead of it. See baseURLForOverride function
-  // for details.
   KURL CompleteURLWithOverride(const String&,
                                const KURL& base_url_override) const;
-  // Determines which base URL should be used given specified override.
-  // If override is empty or is about:blank url and parent document exists
-  // base URL of parent will be returned, passed base URL override otherwise.
-  const KURL& BaseURLForOverride(const KURL& base_url_override) const;
 
   // Determines whether a new document should take on the same origin as that of
   // the document which created it.
@@ -945,6 +951,7 @@ class CORE_EXPORT Document : public ContainerNode,
   String designMode() const;
   void setDesignMode(const String&);
 
+  // The document of the parent frame.
   Document* ParentDocument() const;
   Document& TopDocument() const;
   Document* ContextDocument();
@@ -1031,7 +1038,13 @@ class CORE_EXPORT Document : public ContainerNode,
   const SVGDocumentExtensions* SvgExtensions();
   SVGDocumentExtensions& AccessSVGExtensions();
 
-  void InitContentSecurityPolicy(ContentSecurityPolicy* = nullptr);
+  // the first parameter specifies a policy to use as the document csp meaning
+  // the document will take ownership of the policy
+  // the second parameter specifies a policy to inherit meaning the document
+  // will attempt to copy over the policy
+  void InitContentSecurityPolicy(
+      ContentSecurityPolicy* = nullptr,
+      const ContentSecurityPolicy* policy_to_inherit = nullptr);
 
   void InitCOWL(COWL* = nullptr);
 
@@ -1086,7 +1099,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void EnqueueResizeEvent();
   void EnqueueScrollEventForNode(Node*);
-  void EnqueueAnimationFrameTask(std::unique_ptr<WTF::Closure>);
+  void EnqueueAnimationFrameTask(WTF::Closure);
   void EnqueueAnimationFrameEvent(Event*);
   // Only one event for a target/event type combination will be dispatched per
   // frame.
@@ -1221,6 +1234,11 @@ class CORE_EXPORT Document : public ContainerNode,
     engagement_level_ = level;
   }
 
+  void SetHasHighMediaEngagement(bool has_high_media_engagement) {
+    has_high_media_engagement_ = has_high_media_engagement;
+  }
+  bool HasHighMediaEngagement() const { return has_high_media_engagement_; }
+
   // TODO(thestig): Rename these and related functions, since we can call them
   // for controls outside of forms as well.
   void DidAssociateFormControl(Element*);
@@ -1242,7 +1260,7 @@ class CORE_EXPORT Document : public ContainerNode,
   enum HttpRefreshType { kHttpRefreshFromHeader, kHttpRefreshFromMetaTag };
   void MaybeHandleHttpRefresh(const String&, HttpRefreshType);
 
-  void UpdateSecurityOrigin(PassRefPtr<SecurityOrigin>);
+  void UpdateSecurityOrigin(RefPtr<SecurityOrigin>);
 
   void SetHasViewportUnits() { has_viewport_units_ = true; }
   bool HasViewportUnits() const { return has_viewport_units_; }
@@ -1320,9 +1338,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // Document maintains a counter of visible non-secure password
   // fields in the page. Used to notify the embedder when all visible
-  // non-secure passwords fields are no longer visible.
+  // non-secure password fields are no longer visible.
   void IncrementPasswordCount();
   void DecrementPasswordCount();
+  // Used to notify the embedder when the user edits the value of a
+  // text field in a non-secure context.
+  void MaybeQueueSendDidEditFieldInInsecureContext();
 
   CoreProbeSink* GetProbeSink() final;
 
@@ -1446,6 +1467,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void SendSensitiveInputVisibility();
   void SendSensitiveInputVisibilityInternal();
+  void SendDidEditFieldInInsecureContext();
 
   bool HaveImportsLoaded() const;
   void ViewportDefiningElementDidChange();
@@ -1499,6 +1521,8 @@ class CORE_EXPORT Document : public ContainerNode,
   CompatibilityMode compatibility_mode_;
   // This is cheaper than making setCompatibilityMode virtual.
   bool compatibility_mode_locked_;
+
+  TaskHandle execute_scripts_waiting_for_resources_task_handle_;
 
   bool has_autofocused_;
   TaskRunnerTimer<Document> clear_focused_element_timer_;
@@ -1615,6 +1639,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   LayoutView* layout_view_;
 
+  // The document of creator browsing context for frame-less documents such as
+  // documents created by DOMParser and DOMImplementation.
   WeakMember<Document> context_document_;
 
   // For early return in Fullscreen::fromIfExists()
@@ -1688,11 +1714,17 @@ class CORE_EXPORT Document : public ContainerNode,
 
   unsigned password_count_;
 
+  bool logged_field_edit_;
+
   TaskHandle sensitive_input_visibility_task_;
+
+  TaskHandle sensitive_input_edited_task_;
 
   mojom::EngagementLevel engagement_level_;
 
   Member<NetworkStateObserver> network_state_observer_;
+
+  bool has_high_media_engagement_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

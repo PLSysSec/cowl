@@ -114,11 +114,9 @@ SubresourceFilter* WorkerFetchContext::GetSubresourceFilter() const {
   return subresource_filter_.Get();
 }
 
-bool WorkerFetchContext::ShouldBlockRequestByInspector(
-    const ResourceRequest& resource_request) const {
+bool WorkerFetchContext::ShouldBlockRequestByInspector(const KURL& url) const {
   bool should_block_request = false;
-  probe::shouldBlockRequest(global_scope_, resource_request,
-                            &should_block_request);
+  probe::shouldBlockRequest(global_scope_, url, &should_block_request);
   return should_block_request;
 }
 
@@ -150,13 +148,14 @@ void WorkerFetchContext::CountDeprecation(WebFeature feature) const {
 }
 
 bool WorkerFetchContext::ShouldBlockFetchByMixedContentCheck(
-    const ResourceRequest& resource_request,
+    WebURLRequest::RequestContext request_context,
+    WebURLRequest::FrameType frame_type,
+    ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
     SecurityViolationReportingPolicy reporting_policy) const {
-  // TODO(horo): We need more detailed check which is implemented in
-  // MixedContentChecker::ShouldBlockFetch().
-  return MixedContentChecker::IsMixedContent(global_scope_->GetSecurityOrigin(),
-                                             url);
+  return MixedContentChecker::ShouldBlockFetchOnWorker(
+      global_scope_, web_context_.get(), request_context, frame_type,
+      redirect_status, url, reporting_policy);
 }
 
 bool WorkerFetchContext::ShouldBlockFetchAsCredentialedSubresource(
@@ -222,6 +221,7 @@ SecurityOrigin* WorkerFetchContext::GetSecurityOrigin() const {
 
 std::unique_ptr<WebURLLoader> WorkerFetchContext::CreateURLLoader(
     const ResourceRequest& request) {
+  CountUsage(WebFeature::kOffMainThreadFetch);
   WrappedResourceRequest wrapped(request);
   return web_context_->CreateURLLoader(
       wrapped, loading_task_runner_->ToSingleThreadTaskRunner());
@@ -327,12 +327,9 @@ void WorkerFetchContext::AddResourceTiming(const ResourceTimingInfo& info) {
 }
 
 void WorkerFetchContext::PopulateResourceRequest(
-    const KURL& url,
     Resource::Type type,
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
-    const ResourceLoaderOptions& options,
-    SecurityViolationReportingPolicy reporting_policy,
     ResourceRequest& out_request) {
   SetFirstPartyCookieAndRequestorOrigin(out_request);
 }

@@ -15,6 +15,7 @@
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/Optional.h"
 #include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
@@ -35,25 +36,23 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction) const override;
-  ResourceRequestBlockedReason CanFollowRedirect(
-      Resource::Type,
-      const ResourceRequest&,
+      FetchParameters::OriginRestriction,
+      ResourceRequest::RedirectStatus) const override;
+  ResourceRequestBlockedReason CheckCSPForRequest(
+      WebURLRequest::RequestContext,
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction) const override;
-  ResourceRequestBlockedReason AllowResponse(
-      Resource::Type,
-      const ResourceRequest&,
-      const KURL&,
-      const ResourceLoaderOptions&) const override;
+      ResourceRequest::RedirectStatus) const override;
 
   DECLARE_VIRTUAL_TRACE();
 
   virtual KURL GetFirstPartyForCookies() const = 0;
   virtual void CountUsage(WebFeature) const = 0;
   virtual void CountDeprecation(WebFeature) const = 0;
+
+  void AddWarningConsoleMessage(const String&, LogSource) const override;
+  void AddErrorConsoleMessage(const String&, LogSource) const override;
 
  protected:
   // Used for security checks.
@@ -63,14 +62,16 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   // Note: subclasses are expected to override following methods.
   // Used in the default implementation for CanRequest, CanFollowRedirect
   // and AllowResponse.
-  virtual bool ShouldBlockRequestByInspector(const ResourceRequest&) const = 0;
+  virtual bool ShouldBlockRequestByInspector(const KURL&) const = 0;
   virtual void DispatchDidBlockRequest(const ResourceRequest&,
                                        const FetchInitiatorInfo&,
                                        ResourceRequestBlockedReason) const = 0;
   virtual bool ShouldBypassMainWorldCSP() const = 0;
   virtual bool IsSVGImageChromeClient() const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
-      const ResourceRequest&,
+      WebURLRequest::RequestContext,
+      WebURLRequest::FrameType,
+      ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const = 0;
   virtual bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
@@ -82,19 +83,12 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual Optional<WebAddressSpace> GetAddressSpace() const = 0;
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
   virtual const COWL* GetCOWL() const = 0;
+
   virtual void AddConsoleMessage(ConsoleMessage*) const = 0;
-  using FetchContext::AddConsoleMessage;
 
   // Utility method that can be used to implement other methods.
   void PrintAccessDeniedMessage(const KURL&) const;
   void AddCSPHeaderIfNecessary(Resource::Type, ResourceRequest&);
-  ResourceRequestBlockedReason CheckCSPForRequest(
-      const ResourceRequest&,
-      const KURL&,
-      const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
-      ResourceRequest::RedirectStatus,
-      ContentSecurityPolicy::CheckHeaderType) const;
 
   ResourceRequestBlockedReason CheckCOWLForRequest(
       const ResourceRequest&,
@@ -103,6 +97,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       SecurityViolationReportingPolicy,
       ResourceRequest::RedirectStatus) const;
 
+ private:
   // Utility methods that are used in default implement for CanRequest,
   // CanFollowRedirect and AllowResponse.
   ResourceRequestBlockedReason CanRequestInternal(
@@ -113,6 +108,14 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       SecurityViolationReportingPolicy,
       FetchParameters::OriginRestriction,
       ResourceRequest::RedirectStatus) const;
+
+  ResourceRequestBlockedReason CheckCSPForRequestInternal(
+      WebURLRequest::RequestContext,
+      const KURL&,
+      const ResourceLoaderOptions&,
+      SecurityViolationReportingPolicy,
+      ResourceRequest::RedirectStatus,
+      ContentSecurityPolicy::CheckHeaderType) const;
 };
 
 }  // namespace blink

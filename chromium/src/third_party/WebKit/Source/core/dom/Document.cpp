@@ -29,6 +29,8 @@
 
 #include "core/dom/Document.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
@@ -94,7 +96,6 @@
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/NthIndexCache.h"
 #include "core/dom/ProcessingInstruction.h"
-#include "core/dom/ResizeObserverController.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/dom/ScriptedAnimationController.h"
 #include "core/dom/ScriptedIdleTaskController.h"
@@ -197,6 +198,7 @@
 #include "core/loader/NavigationScheduler.h"
 #include "core/loader/PrerendererClient.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
+#include "core/origin_trials/OriginTrials.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/EventWithHitTestResults.h"
 #include "core/page/FocusController.h"
@@ -209,6 +211,7 @@
 #include "core/page/scrolling/SnapCoordinator.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
 #include "core/probe/CoreProbes.h"
+#include "core/resize_observer/ResizeObserverController.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGScriptElement.h"
 #include "core/svg/SVGTitleElement.h"
@@ -257,11 +260,9 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebPrerenderingSupport.h"
-#include "public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom-blink.h"
+#include "public/platform/modules/insecure_input/insecure_input_service.mojom-blink.h"
 #include "public/platform/site_engagement.mojom-blink.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-
-#include <memory>
 
 #ifndef NDEBUG
 using WeakDocumentSet =
@@ -495,8 +496,10 @@ class Document::NetworkStateObserver final
 };
 
 Document* Document::Create(const Document& document) {
-  Document* new_document = new Document(
-      DocumentInit::FromContext(const_cast<Document*>(&document), BlankURL()));
+  Document* new_document =
+      new Document(DocumentInit::Create()
+                       .WithContextDocument(const_cast<Document*>(&document))
+                       .WithURL(BlankURL()));
   new_document->SetSecurityOrigin(document.GetSecurityOrigin());
   new_document->SetContextFeatures(document.GetContextFeatures());
   return new_document;
@@ -561,7 +564,7 @@ Document::Document(const DocumentInit& initializer,
       document_classes_(document_classes),
       is_view_source_(false),
       saw_elements_in_known_namespaces_(false),
-      is_srcdoc_document_(false),
+      is_srcdoc_document_(initializer.ShouldTreatURLAsSrcdocDocument()),
       is_mobile_document_(false),
       layout_view_(0),
       context_document_(initializer.ContextDocument()),
@@ -596,6 +599,7 @@ Document::Document(const DocumentInit& initializer,
       node_count_(0),
       would_load_reason_(WouldLoadReason::kInvalid),
       password_count_(0),
+      logged_field_edit_(false),
       engagement_level_(mojom::blink::EngagementLevel::NONE) {
   if (frame_) {
     DCHECK(frame_->GetPage());
@@ -625,8 +629,13 @@ Document::Document(const DocumentInit& initializer,
   // See fast/dom/early-frame-url.html
   // and fast/dom/location-new-window-no-crash.html, respectively.
   // FIXME: Can/should we unify this behavior?
-  if (initializer.ShouldSetURL())
+  if (initializer.ShouldSetURL()) {
     SetURL(initializer.Url());
+  } else {
+    // Even if this document has no URL, we need to initialize base URL with
+    // fallback base URL.
+    UpdateBaseURL();
+  }
 
   InitSecurityContext(initializer);
 
@@ -1829,7 +1838,7 @@ void Document::UpdateStyleInvalidationIfNeeded() {
 
 void Document::SetupFontBuilder(ComputedStyle& document_style) {
   FontBuilder font_builder(this);
-  CSSFontSelector* selector = GetStyleEngine().FontSelector();
+  CSSFontSelector* selector = GetStyleEngine().GetFontSelector();
   font_builder.CreateFontForDocument(selector, document_style);
 }
 
@@ -2206,8 +2215,6 @@ void Document::UpdateStyle() {
   ClearChildNeedsStyleRecalc();
   ClearChildNeedsReattachLayoutTree();
 
-  resolver.ClearStyleSharingList();
-
   DCHECK(!NeedsStyleRecalc());
   DCHECK(!ChildNeedsStyleRecalc());
   DCHECK(!NeedsReattachLayoutTree());
@@ -2370,6 +2377,10 @@ void Document::ClearFocusedElementTimerFired(TimerBase*) {
 // lets us get reasonable answers. The long term solution to this problem is
 // to instead suspend JavaScript execution.
 void Document::UpdateStyleAndLayoutTreeIgnorePendingStylesheets() {
+  // See comment for equivalent CHECK in Document::UpdateStyleAndLayoutTree.
+  // Updating style and layout can dirty state that must remain clean during
+  // lifecycle updates.
+  CHECK(Lifecycle().StateAllowsTreeMutations());
   StyleEngine::IgnoringPendingStylesheet ignoring(GetStyleEngine());
 
   if (GetStyleEngine().HasPendingScriptBlockingSheets()) {
@@ -2410,7 +2421,7 @@ void Document::UpdateStyleAndLayoutIgnorePendingStylesheets(
   ++force_layout_count_;
 }
 
-PassRefPtr<ComputedStyle> Document::StyleForElementIgnoringPendingStylesheets(
+RefPtr<ComputedStyle> Document::StyleForElementIgnoringPendingStylesheets(
     Element* element) {
   DCHECK_EQ(element->GetDocument(), this);
   StyleEngine::IgnoringPendingStylesheet ignoring(GetStyleEngine());
@@ -2430,7 +2441,7 @@ PassRefPtr<ComputedStyle> Document::StyleForElementIgnoringPendingStylesheets(
                                                layout_parent_style);
 }
 
-PassRefPtr<ComputedStyle> Document::StyleForPage(int page_index) {
+RefPtr<ComputedStyle> Document::StyleForPage(int page_index) {
   UpdateDistribution();
   return EnsureStyleResolver().StyleForPage(page_index);
 }
@@ -3306,7 +3317,7 @@ void Document::DispatchUnloadEvents() {
         return;
 
       DocumentLoader* document_loader =
-          frame_->Loader().ProvisionalDocumentLoader();
+          frame_->Loader().GetProvisionalDocumentLoader();
       load_event_progress_ = kUnloadEventInProgress;
       Event* unload_event(Event::Create(EventTypeNames::unload));
       if (document_loader && !document_loader->GetTiming().UnloadEventStart() &&
@@ -3329,9 +3340,9 @@ void Document::DispatchUnloadEvents() {
   // Don't remove event listeners from a transitional empty document (see
   // https://bugs.webkit.org/show_bug.cgi?id=28716 for more information).
   bool keep_event_listeners =
-      frame_->Loader().ProvisionalDocumentLoader() &&
+      frame_->Loader().GetProvisionalDocumentLoader() &&
       frame_->ShouldReuseDefaultView(
-          frame_->Loader().ProvisionalDocumentLoader()->Url());
+          frame_->Loader().GetProvisionalDocumentLoader()->Url());
   if (!keep_event_listeners)
     RemoveAllEventListenersRecursively();
 }
@@ -3523,7 +3534,7 @@ void Document::ExceptionThrown(ErrorEvent* event) {
   MainThreadDebugger::Instance()->ExceptionThrown(this, event);
 }
 
-KURL Document::urlForBinding() {
+KURL Document::urlForBinding() const {
   if (!Url().IsNull()) {
     return Url();
   }
@@ -3560,7 +3571,7 @@ void Document::UpdateBaseURL() {
   else if (!base_url_override_.IsEmpty())
     base_url_ = base_url_override_;
   else
-    base_url_ = url_;
+    base_url_ = FallbackBaseURL();
 
   GetSelectorQueryCache().Invalidate();
 
@@ -3581,6 +3592,23 @@ void Document::UpdateBaseURL() {
          Traversal<HTMLAnchorElement>::StartsAfter(*this))
       anchor.InvalidateCachedVisitedLinkHash();
   }
+}
+
+KURL Document::FallbackBaseURL() const {
+  if (IsSrcdocDocument()) {
+    // TODO(tkent): Referring to ParentDocument() is not correct.  See
+    // crbug.com/751329.
+    if (Document* parent = ParentDocument())
+      return parent->BaseURL();
+  } else if (urlForBinding().IsAboutBlankURL()) {
+    if (context_document_)
+      return context_document_->BaseURL();
+    // TODO(tkent): Referring to ParentDocument() is not correct.  See
+    // crbug.com/751329.
+    if (Document* parent = ParentDocument())
+      return parent->BaseURL();
+  }
+  return urlForBinding();
 }
 
 const KURL& Document::BaseURL() const {
@@ -3626,7 +3654,7 @@ void Document::ProcessBaseElement() {
   if (href) {
     String stripped_href = StripLeadingAndTrailingHTMLSpaces(*href);
     if (!stripped_href.IsEmpty())
-      base_element_url = KURL(Url(), stripped_href);
+      base_element_url = KURL(FallbackBaseURL(), stripped_href);
   }
 
   if (!base_element_url.IsEmpty()) {
@@ -3701,10 +3729,12 @@ void Document::DidRemoveAllPendingBodyStylesheets() {
 void Document::DidLoadAllScriptBlockingResources() {
   // Use wrapWeakPersistent because the task should not keep this Document alive
   // just for executing scripts.
-  TaskRunnerHelper::Get(TaskType::kNetworking, this)
-      ->PostTask(BLINK_FROM_HERE,
-                 WTF::Bind(&Document::ExecuteScriptsWaitingForResources,
-                           WrapWeakPersistent(this)));
+  execute_scripts_waiting_for_resources_task_handle_ =
+      TaskRunnerHelper::Get(TaskType::kNetworking, this)
+          ->PostCancellableTask(
+              BLINK_FROM_HERE,
+              WTF::Bind(&Document::ExecuteScriptsWaitingForResources,
+                        WrapWeakPersistent(this)));
 
   if (IsHTMLDocument() && body()) {
     // For HTML if we have no more stylesheets to load and we're past the body
@@ -3766,7 +3796,8 @@ void Document::MaybeHandleHttpRefresh(const String& content,
                                              kErrorMessageLevel, message));
     return;
   }
-  frame_->GetNavigationScheduler().ScheduleRedirect(delay, refresh_url);
+  frame_->GetNavigationScheduler().ScheduleRedirect(delay, refresh_url,
+                                                    http_refresh_type);
 }
 
 bool Document::ShouldMergeWithLegacyDescription(
@@ -4069,7 +4100,9 @@ Node* Document::cloneNode(bool deep, ExceptionState&) {
 }
 
 Document* Document::CloneDocumentWithoutChildren() {
-  DocumentInit init = DocumentInit::FromContext(ContextDocument(), Url());
+  DocumentInit init = DocumentInit::Create()
+                          .WithContextDocument(ContextDocument())
+                          .WithURL(Url());
   if (IsXMLDocument()) {
     if (IsXHTMLDocument())
       return XMLDocument::CreateXHTML(
@@ -4490,10 +4523,10 @@ static void LiveNodeListBaseWriteBarrier(void* parent,
                                          const LiveNodeListBase* list) {
   if (IsHTMLCollectionType(list->GetType())) {
     ScriptWrappableVisitor::WriteBarrier(
-        parent, static_cast<const HTMLCollection*>(list));
+        static_cast<const HTMLCollection*>(list));
   } else {
     ScriptWrappableVisitor::WriteBarrier(
-        parent, static_cast<const LiveNodeList*>(list));
+        static_cast<const LiveNodeList*>(list));
   }
 }
 
@@ -4650,7 +4683,7 @@ EventQueue* Document::GetEventQueue() const {
   return dom_window_->GetEventQueue();
 }
 
-void Document::EnqueueAnimationFrameTask(std::unique_ptr<WTF::Closure> task) {
+void Document::EnqueueAnimationFrameTask(WTF::Closure task) {
   EnsureScriptedAnimationController().EnqueueTask(std::move(task));
 }
 
@@ -4732,14 +4765,25 @@ void Document::SendSensitiveInputVisibilityInternal() {
   if (!GetFrame())
     return;
 
-  mojom::blink::SensitiveInputVisibilityServicePtr sensitive_input_service_ptr;
+  mojom::blink::InsecureInputServicePtr insecure_input_service_ptr;
   GetFrame()->GetInterfaceProvider().GetInterface(
-      mojo::MakeRequest(&sensitive_input_service_ptr));
+      mojo::MakeRequest(&insecure_input_service_ptr));
   if (password_count_ > 0) {
-    sensitive_input_service_ptr->PasswordFieldVisibleInInsecureContext();
+    insecure_input_service_ptr->PasswordFieldVisibleInInsecureContext();
     return;
   }
-  sensitive_input_service_ptr->AllPasswordFieldsInInsecureContextInvisible();
+  insecure_input_service_ptr->AllPasswordFieldsInInsecureContextInvisible();
+}
+
+void Document::SendDidEditFieldInInsecureContext() {
+  if (!GetFrame())
+    return;
+
+  mojom::blink::InsecureInputServicePtr insecure_input_service_ptr;
+  GetFrame()->GetInterfaceProvider().GetInterface(
+      mojo::MakeRequest(&insecure_input_service_ptr));
+
+  insecure_input_service_ptr->DidEditFieldInInsecureContext();
 }
 
 void Document::RegisterEventFactory(
@@ -4759,7 +4803,7 @@ Event* Document::createEvent(ScriptState* script_state,
       // createEvent for TouchEvent should throw DOM exception if touch event
       // feature detection is not enabled. See crbug.com/392584#c22
       if (DeprecatedEqualIgnoringCase(event_type, "TouchEvent") &&
-          !RuntimeEnabledFeatures::TouchEventFeatureDetectionEnabled())
+          !OriginTrials::touchEventFeatureDetectionEnabled(execution_context))
         break;
       return event;
     }
@@ -5335,28 +5379,9 @@ KURL Document::CompleteURLWithOverride(const String& url,
   // See also [CSS]StyleSheet::completeURL(const String&)
   if (url.IsNull())
     return KURL();
-  // This logic is deliberately spread over many statements in an attempt to
-  // track down http://crbug.com/312410.
-  const KURL& base_url = BaseURLForOverride(base_url_override);
   if (!Encoding().IsValid())
-    return KURL(base_url, url);
-  return KURL(base_url, url, Encoding());
-}
-
-const KURL& Document::BaseURLForOverride(const KURL& base_url_override) const {
-  // This logic is deliberately spread over many statements in an attempt to
-  // track down http://crbug.com/312410.
-  const KURL* base_url_from_parent = 0;
-  bool should_use_parent_base_url = base_url_override.IsEmpty();
-  if (!should_use_parent_base_url) {
-    const KURL& about_blank_url = BlankURL();
-    should_use_parent_base_url = (base_url_override == about_blank_url);
-  }
-  if (should_use_parent_base_url) {
-    if (Document* parent = ParentDocument())
-      base_url_from_parent = &parent->BaseURL();
-  }
-  return base_url_from_parent ? *base_url_from_parent : base_url_override;
+    return KURL(base_url_override, url);
+  return KURL(base_url_override, url, Encoding());
 }
 
 // static
@@ -5816,6 +5841,8 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
       AddInsecureNavigationUpgrade(to_upgrade);
   }
 
+  ContentSecurityPolicy* policy_to_inherit = nullptr;
+
   if (IsSandboxed(kSandboxOrigin)) {
     cookie_url_ = url_;
     SetSecurityOrigin(SecurityOrigin::CreateUnique());
@@ -5825,17 +5852,20 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     // load local resources. The latter lets about:blank iframes in
     // file:// URL documents load images and other resources from
     // the file system.
-    if (initializer.Owner() &&
-        initializer.Owner()->GetSecurityOrigin()->IsPotentiallyTrustworthy())
-      GetSecurityOrigin()->SetUniqueOriginIsPotentiallyTrustworthy(true);
-    if (initializer.Owner() &&
-        initializer.Owner()->GetSecurityOrigin()->CanLoadLocalResources())
-      GetSecurityOrigin()->GrantLoadLocalResources();
-  } else if (initializer.Owner()) {
-    cookie_url_ = initializer.Owner()->CookieURL();
+    Document* owner = initializer.OwnerDocument();
+    if (owner) {
+      if (owner->GetSecurityOrigin()->IsPotentiallyTrustworthy())
+        GetSecurityOrigin()->SetUniqueOriginIsPotentiallyTrustworthy(true);
+      if (owner->GetSecurityOrigin()->CanLoadLocalResources())
+        GetSecurityOrigin()->GrantLoadLocalResources();
+      policy_to_inherit = owner->GetContentSecurityPolicy();
+    }
+  } else if (Document* owner = initializer.OwnerDocument()) {
+    cookie_url_ = owner->CookieURL();
     // We alias the SecurityOrigins to match Firefox, see Bug 15313
     // https://bugs.webkit.org/show_bug.cgi?id=15313
-    SetSecurityOrigin(initializer.Owner()->GetSecurityOrigin());
+    SetSecurityOrigin(owner->GetSecurityOrigin());
+    policy_to_inherit = owner->GetContentSecurityPolicy();
   } else {
     cookie_url_ = url_;
     SetSecurityOrigin(SecurityOrigin::Create(url_));
@@ -5867,7 +5897,7 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     SetContentSecurityPolicy(
         ImportsController()->Master()->GetContentSecurityPolicy());
   } else {
-    InitContentSecurityPolicy();
+    InitContentSecurityPolicy(nullptr, policy_to_inherit);
   }
 
   if (GetSecurityOrigin()->HasSuborigin())
@@ -5892,11 +5922,6 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     }
   }
 
-  if (initializer.ShouldTreatURLAsSrcdocDocument()) {
-    is_srcdoc_document_ = true;
-    SetBaseURLOverride(initializer.ParentBaseURL());
-  }
-
   if (GetSecurityOrigin()->IsUnique() &&
       SecurityOrigin::Create(url_)->IsPotentiallyTrustworthy())
     GetSecurityOrigin()->SetUniqueOriginIsPotentiallyTrustworthy(true);
@@ -5915,7 +5940,13 @@ void Document::InitCOWL(COWL* cowl) {
   GetCOWL()->BindToExecutionContext(this);
 }
 
-void Document::InitContentSecurityPolicy(ContentSecurityPolicy* csp) {
+// the first parameter specifies a policy to use as the document csp meaning
+// the document will take ownership of the policy
+// the second parameter specifies a policy to inherit meaning the document
+// will attempt to copy over the policy
+void Document::InitContentSecurityPolicy(
+    ContentSecurityPolicy* csp,
+    const ContentSecurityPolicy* policy_to_inherit) {
   SetContentSecurityPolicy(csp ? csp : ContentSecurityPolicy::Create());
 
   // We inherit the parent/opener's CSP for documents with "local" schemes:
@@ -5927,24 +5958,27 @@ void Document::InitContentSecurityPolicy(ContentSecurityPolicy* csp) {
   //
   // TODO(dcheng): This is similar enough to work we're doing in
   // 'DocumentLoader::ensureWriter' that it might make sense to combine them.
-  if (frame_) {
+  if (policy_to_inherit) {
+    GetContentSecurityPolicy()->CopyStateFrom(policy_to_inherit);
+  } else if (frame_) {
     Frame* inherit_from = frame_->Tree().Parent() ? frame_->Tree().Parent()
                                                   : frame_->Client()->Opener();
     if (inherit_from && frame_ != inherit_from) {
       DCHECK(inherit_from->GetSecurityContext() &&
              inherit_from->GetSecurityContext()->GetContentSecurityPolicy());
-      ContentSecurityPolicy* policy_to_inherit =
+      policy_to_inherit =
           inherit_from->GetSecurityContext()->GetContentSecurityPolicy();
       if (url_.IsEmpty() || url_.ProtocolIsAbout() || url_.ProtocolIsData() ||
           url_.ProtocolIs("blob") || url_.ProtocolIs("filesystem")) {
         GetContentSecurityPolicy()->CopyStateFrom(policy_to_inherit);
       }
-      // Plugin documents inherit their parent/opener's 'plugin-types' directive
-      // regardless of URL.
-      if (IsPluginDocument())
-        GetContentSecurityPolicy()->CopyPluginTypesFrom(policy_to_inherit);
     }
   }
+  // Plugin documents inherit their parent/opener's 'plugin-types' directive
+  // regardless of URL.
+  if (policy_to_inherit && IsPluginDocument())
+    GetContentSecurityPolicy()->CopyPluginTypesFrom(policy_to_inherit);
+
   GetContentSecurityPolicy()->BindToExecutionContext(this);
 }
 
@@ -6033,7 +6067,7 @@ void Document::EnforceSandboxFlags(SandboxFlags mask) {
   }
 }
 
-void Document::UpdateSecurityOrigin(PassRefPtr<SecurityOrigin> origin) {
+void Document::UpdateSecurityOrigin(RefPtr<SecurityOrigin> origin) {
   SetSecurityOrigin(std::move(origin));
   DidUpdateSecurityOrigin();
 }
@@ -6192,7 +6226,7 @@ void Document::TasksWereResumed() {
 
 bool Document::TasksNeedSuspension() {
   Page* page = this->GetPage();
-  return page && page->Suspended();
+  return page && page->Paused();
 }
 
 void Document::AddToTopLayer(Element* element, const Element* before) {
@@ -6551,11 +6585,6 @@ void Document::UpdateActiveState(const HitTestRequest& request,
 
 void Document::UpdateHoverState(const HitTestRequest& request,
                                 Element* inner_element_in_document) {
-  // Do not set hover state if event is from touch and on mobile.
-  bool allow_hover_changes =
-      !(request.TouchEvent() && GetPage() &&
-        GetPage()->GetVisualViewport().ShouldDisableDesktopWorkarounds());
-
   Element* old_hover_element = HoverElement();
 
   // The passed in innerElement may not be a result of a hit test for the
@@ -6566,10 +6595,9 @@ void Document::UpdateHoverState(const HitTestRequest& request,
       SkipDisplayNoneAncestors(inner_element_in_document);
 
   // Update our current hover element.
-  if (allow_hover_changes)
-    SetHoverElement(new_hover_element);
+  SetHoverElement(new_hover_element);
 
-  if (old_hover_element == new_hover_element || !allow_hover_changes)
+  if (old_hover_element == new_hover_element)
     return;
 
   Node* ancestor_element = nullptr;
@@ -6649,11 +6677,14 @@ Document& Document::EnsureTemplateDocument() {
     return *template_document_;
 
   if (IsHTMLDocument()) {
-    DocumentInit init = DocumentInit::FromContext(ContextDocument(), BlankURL())
-                            .WithNewRegistrationContext();
-    template_document_ = HTMLDocument::Create(init);
+    template_document_ =
+        HTMLDocument::Create(DocumentInit::Create()
+                                 .WithContextDocument(ContextDocument())
+                                 .WithURL(BlankURL())
+                                 .WithNewRegistrationContext());
   } else {
-    template_document_ = Document::Create(DocumentInit(BlankURL()));
+    template_document_ =
+        Document::Create(DocumentInit::Create().WithURL(BlankURL()));
   }
 
   template_document_->template_document_host_ = this;  // balanced in dtor.
@@ -6854,6 +6885,27 @@ void Document::DecrementPasswordCount() {
   if (IsSecureContext() || password_count_ > 0)
     return;
   SendSensitiveInputVisibility();
+}
+
+void Document::MaybeQueueSendDidEditFieldInInsecureContext() {
+  if (logged_field_edit_ || sensitive_input_edited_task_.IsActive() ||
+      IsSecureContext()) {
+    // Send a message on the first edit; the browser process doesn't care
+    // about the presence of additional edits.
+    //
+    // The browser process only cares about editing fields on pages where the
+    // top-level URL is not secure. Secure contexts must have a top-level URL
+    // that is secure, so there is no need to send notifications for editing
+    // in secure contexts.
+    return;
+  }
+  logged_field_edit_ = true;
+  sensitive_input_edited_task_ =
+      TaskRunnerHelper::Get(TaskType::kUserInteraction, this)
+          ->PostCancellableTask(
+              BLINK_FROM_HERE,
+              WTF::Bind(&Document::SendDidEditFieldInInsecureContext,
+                        WrapWeakPersistent(this)));
 }
 
 CoreProbeSink* Document::GetProbeSink() {
