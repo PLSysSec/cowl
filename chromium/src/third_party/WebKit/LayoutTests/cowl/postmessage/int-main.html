@@ -10,15 +10,17 @@ var iframe = document.querySelector('iframe');
 
 async_test(t => {
     iframe.onload = t.step_func(() => {
-      iframe.contentWindow.postMessage('hello', '*');
+      var lobj = new LabeledObject({obj: 5});
+      iframe.contentWindow.postMessage(lobj, '*');
+      //iframe.contentWindow.postMessage('hello', '*');
       });
 
     window.addEventListener('message', t.step_func(e => {
-        assert_unreached('Message should be dropped by COWL');
-        }));
+      assert_unreached('Message should be dropped by COWL');
+      }));
 
     // Success on timeout: message to iframe dropped by COWL
-    t.step_timeout(() => { t.done(); }, 2000);
+     t.step_timeout(() => { t.done(); }, 2000);
 
     iframe.src = 'int-iframe.html';
     }, 'Testing Integrity PostMessage');

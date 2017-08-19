@@ -22,6 +22,8 @@ function test_cowl_labels() {
       }, 'Label equals()');
 
   test(() => {
+      assert_false(empty.subsumes(a), 'public data is not more sensitive/trustworthy than a.com');
+
       assert_true(a.subsumes(empty), 'a.com data is more sensitive/trustworthy than public data');
       assert_true(b.subsumes(empty), 'b.com data is more sensitive/trustworthy than public data');
 
