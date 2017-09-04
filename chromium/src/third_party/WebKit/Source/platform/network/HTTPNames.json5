@@ -54,6 +54,7 @@
     "Refresh",
     "Resource-Freshness",
     "Sec-Required-CSP",
+    "Sec-COWL",
     "Server-Timing",
     "SourceMap",
     "Suborigin",

@@ -24,9 +24,14 @@
 #include "core/xmlhttprequest/XMLHttpRequest.h"
 
 #include <memory>
-#include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams.h"
 #include "bindings/core/v8/ArrayBufferOrArrayBufferViewOrBlobOrUSVString.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8ObjectBuilder.h"
+#include "bindings/core/v8/XHRBody.h"
+#include "core/cowl/COWL.h"
+#include "core/cowl/Label.h"
+#include "core/cowl/LabeledObject.h"
+#include "core/cowl/COWLParser.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/DocumentInit.h"
@@ -286,6 +291,7 @@ XMLHttpRequest::XMLHttpRequest(
     : SuspendableObject(context),
       timeout_milliseconds_(0),
       response_blob_(this, nullptr),
+      response_lobj_(this, nullptr),
       state_(kUnsent),
       response_document_(this, nullptr),
       length_downloaded_to_file_(0),
@@ -329,6 +335,9 @@ XMLHttpRequest::State XMLHttpRequest::readyState() const {
 }
 
 ScriptString XMLHttpRequest::responseText(ExceptionState& exception_state) {
+  if (ResponseIsLabeledObject())
+    return ScriptString();
+
   if (response_type_code_ != kResponseTypeDefault &&
       response_type_code_ != kResponseTypeText) {
     exception_state.ThrowDOMException(kInvalidStateError,
@@ -344,6 +353,9 @@ ScriptString XMLHttpRequest::responseText(ExceptionState& exception_state) {
 }
 
 ScriptString XMLHttpRequest::ResponseJSONSource() {
+  if (ResponseIsLabeledObject())
+    return ScriptString();
+
   DCHECK_EQ(response_type_code_, kResponseTypeJSON);
 
   if (error_ || state_ != kDone)
@@ -378,6 +390,9 @@ void XMLHttpRequest::InitResponseDocument() {
 }
 
 Document* XMLHttpRequest::responseXML(ExceptionState& exception_state) {
+  if (ResponseIsLabeledObject())
+    return nullptr;
+
   if (response_type_code_ != kResponseTypeDefault &&
       response_type_code_ != kResponseTypeDocument) {
     exception_state.ThrowDOMException(kInvalidStateError,
@@ -406,7 +421,73 @@ Document* XMLHttpRequest::responseXML(ExceptionState& exception_state) {
   return response_document_;
 }
 
+LabeledObject* XMLHttpRequest::ResponseLabeledObject(ExceptionState& exception_state) {
+  if (!ResponseIsLabeledObject())
+    return nullptr;
+
+  DCHECK_EQ(response_type_code_, kResponseTypeLabeledObject);
+
+  // We always return null before kDone.
+  if (error_ || state_ != kDone)
+    return nullptr;
+
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  ScriptState* script_state = ScriptState::From(context);
+
+  String response = response_text_.FlattenToString();
+
+  v8::Local<v8::Value> response_value = FromJSONString(
+            isolate, response, exception_state);
+
+  if (exception_state.HadException())
+    return nullptr;
+
+  if (IsUndefinedOrNull(response_value))
+    return nullptr;
+
+  if (!response_value->IsObject()) {
+    exception_state.ThrowTypeError("cannot convert to dictionary.");
+    return nullptr;
+  }
+  v8::Local<v8::Object> response_object = response_value.As<v8::Object>();
+
+  v8::Local<v8::Value> conf_value;
+  if (!response_object->Get(context, v8::String::NewFromUtf8(isolate, "confidentiality")).ToLocal(&conf_value))
+    return nullptr;
+
+  String conf_expr = ToCoreStringWithNullCheck(conf_value.As<v8::String>());
+
+  v8::Local<v8::Value> integrity_value;
+  if (!response_object->Get(context, v8::String::NewFromUtf8(isolate, "integrity")).ToLocal(&integrity_value))
+    return nullptr;
+
+  String integrity_expr = ToCoreStringWithNullCheck(integrity_value.As<v8::String>());
+
+  v8::Local<v8::Value> obj_value;
+  if (!response_object->Get(context, v8::String::NewFromUtf8(isolate, "object")).ToLocal(&obj_value))
+    return nullptr;
+
+  ScriptValue obj = ScriptValue(script_state, obj_value);
+
+  String self = Url().GetString();
+
+  Label* conf = COWLParser::ParseLabelExpression(conf_expr, self);
+  Label* integrity  = COWLParser::ParseLabelExpression(integrity_expr, self);
+
+  CILabel labels;
+  labels.setConfidentiality(conf);
+  labels.setIntegrity(integrity);
+
+  response_lobj_ = LabeledObject::Create(script_state, obj, labels,  exception_state);
+
+  return response_lobj_;
+}
+
 Blob* XMLHttpRequest::ResponseBlob() {
+  if (!ResponseIsLabeledObject())
+    return nullptr;
+
   DCHECK_EQ(response_type_code_, kResponseTypeBlob);
 
   // We always return null before kDone.
@@ -446,6 +527,9 @@ Blob* XMLHttpRequest::ResponseBlob() {
 }
 
 DOMArrayBuffer* XMLHttpRequest::ResponseArrayBuffer() {
+  if (!ResponseIsLabeledObject())
+    return nullptr;
+
   DCHECK_EQ(response_type_code_, kResponseTypeArrayBuffer);
 
   if (error_ || state_ != kDone)
@@ -535,6 +619,8 @@ void XMLHttpRequest::setResponseType(const String& response_type,
     response_type_code_ = kResponseTypeBlob;
   } else if (response_type == "arraybuffer") {
     response_type_code_ = kResponseTypeArrayBuffer;
+  } else if (response_type == "labeled-json") {
+    response_type_code_ = kResponseTypeLabeledObject;
   } else {
     NOTREACHED();
   }
@@ -554,6 +640,8 @@ String XMLHttpRequest::responseType() {
       return "blob";
     case kResponseTypeArrayBuffer:
       return "arraybuffer";
+    case kResponseTypeLabeledObject:
+      return "labeled-json";
   }
   return "";
 }
@@ -765,7 +853,7 @@ bool XMLHttpRequest::InitSend(ExceptionState& exception_state) {
 }
 
 void XMLHttpRequest::send(
-    const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams&
+    const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrLabeledObjectOrURLSearchParams&
         body,
     ExceptionState& exception_state) {
   probe::willSendXMLHttpOrFetchNetworkRequest(GetExecutionContext(), Url());
@@ -797,6 +885,11 @@ void XMLHttpRequest::send(
 
   if (body.isFormData()) {
     send(body.getAsFormData(), exception_state);
+    return;
+  }
+
+  if (body.isLabeledObject()) {
+    send(body.getAsLabeledObject(), exception_state);
     return;
   }
 
@@ -837,6 +930,55 @@ void XMLHttpRequest::send(Document* document, ExceptionState& exception_state) {
 
     http_body = EncodedFormData::Create(
         UTF8Encoding().Encode(body, WTF::kEntitiesForUnencodables));
+  }
+
+  CreateRequest(std::move(http_body), exception_state);
+}
+
+void XMLHttpRequest::send(LabeledObject* lobj, ExceptionState& exception_state) {
+  NETWORK_DVLOG(1) << this << " send() LabeledObject " << lobj;
+
+  if (!InitSend(exception_state))
+    return;
+
+  RefPtr<SecurityOrigin> request_origin = SecurityOrigin::Create(url_);
+  Label* remote_conf = Label::Create(request_origin->ToString(), exception_state);
+  COWL* cowl = GetExecutionContext()->GetCOWL();
+  Privilege* priv = cowl->GetPrivilege();
+  if (!remote_conf->subsumes(lobj->confidentiality(), priv)) {
+    exception_state.ThrowSecurityError("Failed attempt to declassify labeled object without sufficient privileges");
+    return;
+  }
+
+  ScriptValue obj = lobj->GetObj();
+  v8::Local<v8::Value> value = obj.V8Value();
+  ScriptState* script_state = obj.GetScriptState();
+  v8::Local<v8::Context> context = obj.GetContext();
+
+  V8ObjectBuilder builder(script_state);
+  builder.AddString("confidentiality", lobj->confidentiality()->toString());
+  builder.AddString("integrity", lobj->integrity()->toString());
+  builder.Add("object", value);
+
+  ScriptValue json_object = builder.GetScriptValue();
+
+  String body = ToCoreStringWithNullCheck(
+      v8::JSON::Stringify(context, json_object.V8Value().As<v8::Object>()).ToLocalChecked());
+
+  RefPtr<EncodedFormData> http_body;
+
+  if (!body.IsNull() && AreMethodAndURLValidForSend()) {
+    http_body = EncodedFormData::Create(
+        UTF8Encoding().Encode(body, WTF::kEntitiesForUnencodables));
+
+    UpdateContentTypeAndCharset("application/labeled-json;charset=UTF-8", "UTF-8");
+    String sec_cowl = String::Format(
+        "data-confidentiality %s; "
+        "data-integrity %s",
+        lobj->confidentiality()->toString().Utf8().data(),
+        lobj->integrity()->toString().Utf8().data()
+        );
+    SetRequestHeaderInternal(HTTPNames::Sec_COWL, AtomicString(sec_cowl));
   }
 
   CreateRequest(std::move(http_body), exception_state);
@@ -1227,6 +1369,7 @@ void XMLHttpRequest::ClearResponse() {
   response_document_ = nullptr;
 
   response_blob_ = nullptr;
+  response_lobj_ = nullptr;
 
   downloading_to_file_ = false;
   length_downloaded_to_file_ = 0;
@@ -1525,6 +1668,11 @@ bool XMLHttpRequest::ResponseIsHTML() const {
   return EqualIgnoringASCIICase(FinalResponseMIMEType(), "text/html");
 }
 
+bool XMLHttpRequest::ResponseIsLabeledObject() const {
+  const AtomicString content_type = getResponseHeader(HTTPNames::Content_Type);
+  return content_type == "application/labeled-json";
+}
+
 int XMLHttpRequest::status() const {
   if (state_ == kUnsent || state_ == kOpened || error_)
     return 0;
@@ -1804,6 +1952,7 @@ void XMLHttpRequest::DidReceiveData(const char* data, unsigned len) {
   } else if (response_type_code_ == kResponseTypeDefault ||
              response_type_code_ == kResponseTypeText ||
              response_type_code_ == kResponseTypeJSON ||
+             response_type_code_ == kResponseTypeLabeledObject ||
              response_type_code_ == kResponseTypeDocument) {
     if (!decoder_)
       decoder_ = CreateDecoder();
@@ -1904,6 +2053,7 @@ ExecutionContext* XMLHttpRequest::GetExecutionContext() const {
 
 DEFINE_TRACE(XMLHttpRequest) {
   visitor->Trace(response_blob_);
+  visitor->Trace(response_lobj_);
   visitor->Trace(loader_);
   visitor->Trace(response_document_);
   visitor->Trace(response_document_parser_);
@@ -1918,6 +2068,7 @@ DEFINE_TRACE(XMLHttpRequest) {
 
 DEFINE_TRACE_WRAPPERS(XMLHttpRequest) {
   visitor->TraceWrappers(response_blob_);
+  visitor->TraceWrappers(response_lobj_);
   visitor->TraceWrappers(response_document_);
   visitor->TraceWrappers(response_array_buffer_);
   XMLHttpRequestEventTarget::TraceWrappers(visitor);

@@ -48,7 +48,7 @@
 namespace blink {
 
 class
-    ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams;
+    ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrLabeledObjectOrURLSearchParams;
 class Blob;
 class BlobDataHandle;
 class DOMArrayBuffer;
@@ -58,6 +58,7 @@ class DocumentParser;
 class ExceptionState;
 class ExecutionContext;
 class FormData;
+class LabeledObject;
 class ScriptState;
 class SharedBuffer;
 class TextResourceDecoder;
@@ -65,6 +66,7 @@ class ThreadableLoader;
 class URLSearchParams;
 class WebDataConsumerHandle;
 class XMLHttpRequestUpload;
+
 
 class XMLHttpRequest final : public XMLHttpRequestEventTarget,
                              private ThreadableLoaderClient,
@@ -101,6 +103,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
     kResponseTypeDocument,
     kResponseTypeBlob,
     kResponseTypeArrayBuffer,
+    kResponseTypeLabeledObject,
   };
 
   // SuspendableObject
@@ -134,7 +137,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
             bool async,
             ExceptionState&);
   void send(
-      const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams&,
+      const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrLabeledObjectOrURLSearchParams&,
       ExceptionState&);
   void abort();
   void Dispose();
@@ -148,6 +151,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   ScriptString ResponseJSONSource();
   Document* responseXML(ExceptionState&);
   Blob* ResponseBlob();
+  LabeledObject* ResponseLabeledObject(ExceptionState&);
   DOMArrayBuffer* ResponseArrayBuffer();
   unsigned timeout() const { return timeout_milliseconds_; }
   void setTimeout(unsigned timeout, ExceptionState&);
@@ -222,6 +226,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   String FinalResponseCharset() const;
   bool ResponseIsXML() const;
   bool ResponseIsHTML() const;
+  bool ResponseIsLabeledObject() const;
 
   std::unique_ptr<TextResourceDecoder> CreateDecoder() const;
 
@@ -237,6 +242,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   void send(Document*, ExceptionState&);
   void send(const String&, ExceptionState&);
   void send(Blob*, ExceptionState&);
+  void send(LabeledObject*, ExceptionState&);
   void send(FormData*, ExceptionState&);
   void send(URLSearchParams*, ExceptionState&);
   void send(DOMArrayBuffer*, ExceptionState&);
@@ -297,6 +303,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   AtomicString mime_type_override_;
   unsigned long timeout_milliseconds_;
   TraceWrapperMember<Blob> response_blob_;
+  TraceWrapperMember<LabeledObject> response_lobj_;
 
   Member<ThreadableLoader> loader_;
   State state_;

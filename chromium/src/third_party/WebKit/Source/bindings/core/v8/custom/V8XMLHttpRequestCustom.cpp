@@ -36,6 +36,7 @@
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Blob.h"
+#include "bindings/core/v8/V8LabeledObject.h"
 #include "bindings/core/v8/V8Document.h"
 #include "bindings/core/v8/V8FormData.h"
 #include "bindings/core/v8/V8HTMLDocument.h"
@@ -105,6 +106,12 @@ void V8XMLHttpRequest::responseAttributeGetterCustom(
     case XMLHttpRequest::kResponseTypeBlob: {
       Blob* blob = xml_http_request->ResponseBlob();
       V8SetReturnValueFast(info, blob, xml_http_request);
+      return;
+    }
+
+    case XMLHttpRequest::kResponseTypeLabeledObject: {
+      LabeledObject* lobj = xml_http_request->ResponseLabeledObject(exception_state);
+      V8SetReturnValueFast(info, lobj, xml_http_request);
       return;
     }
 
