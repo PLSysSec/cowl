@@ -142,7 +142,23 @@ Label* COWL::GetConfidentiality() const { return confidentiality_; }
 Label* COWL::GetIntegrity() const { return integrity_; }
 Privilege* COWL::GetPrivilege() const { return privilege_; }
 
-void COWL::Enable() { enabled_ = true; }
+void COWL::Enable() {
+  SandboxFlags mask = kSandboxPlugins | kSandboxDocumentDomain;
+
+  Label* effective_conf = confidentiality_->Downgrade(privilege_);
+  Label* effective_int = integrity_->Upgrade(privilege_);
+
+  if (!effective_conf->IsEmpty() || !effective_int->IsEmpty()) {
+    mask |= (kSandboxOrigin
+           | kSandboxNavigation
+           | kSandboxTopNavigation
+           | kSandboxPropagatesToAuxiliaryBrowsingContexts);
+  }
+
+  execution_context_->GetSecurityContext().EnforceSandboxFlags(mask);
+  enabled_ = true;
+}
+
 void COWL::SetConfidentiality(Label* label) { confidentiality_ = label; }
 void COWL::SetIntegrity(Label* label) { integrity_ = label; }
 void COWL::SetPrivilege(Privilege* priv) { privilege_ = priv; }
