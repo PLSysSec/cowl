@@ -52,6 +52,8 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL> {
                     SecurityViolationReportingPolicy =
                     SecurityViolationReportingPolicy::kReport) const;
 
+  void AddCtxHeader(ResourceRequest&);
+
   void LogToConsole(const String& message, MessageLevel = kErrorMessageLevel) const;
   void LogToConsole(ConsoleMessage*, LocalFrame* = nullptr) const;
 

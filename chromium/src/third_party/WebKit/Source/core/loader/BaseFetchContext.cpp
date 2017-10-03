@@ -110,6 +110,14 @@ void BaseFetchContext::AddCSPHeaderIfNecessary(Resource::Type type,
     request.AddHTTPHeaderField("CSP", "active");
 }
 
+void BaseFetchContext::AddCOWLHeader(ResourceRequest& request) {
+  const COWL* cowl = GetCOWL();
+  if (!cowl)
+    return;
+
+  cowl->AddCtxHeader(request);
+}
+
 ResourceRequestBlockedReason BaseFetchContext::CheckCSPForRequest(
     WebURLRequest::RequestContext request_context,
     const KURL& url,

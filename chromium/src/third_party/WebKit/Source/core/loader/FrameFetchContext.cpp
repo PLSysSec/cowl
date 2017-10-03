@@ -836,6 +836,7 @@ void FrameFetchContext::PopulateResourceRequest(
   ModifyRequestForCSP(request);
   AddClientHintsIfNecessary(hints_preferences, resource_width, request);
   AddCSPHeaderIfNecessary(type, request);
+  AddCOWLHeader(request);
 }
 
 void FrameFetchContext::SetFirstPartyCookieAndRequestorOrigin(

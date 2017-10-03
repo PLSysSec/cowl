@@ -109,6 +109,21 @@ bool COWL::AllowRequest(
   return false;
 }
 
+void COWL::AddCtxHeader(ResourceRequest& request) {
+  if (!enabled_ || request.GetReferrerPolicy() == kReferrerPolicyNever)
+    return;
+
+  String ctx_header = String::Format(
+      "ctx-confidentiality %s; "
+      "ctx-integrity %s; "
+      "ctx-privilege %s",
+      confidentiality_->toString().Utf8().data(),
+      integrity_->toString().Utf8().data(),
+      privilege_->asLabel()->toString().Utf8().data()
+      );
+  request.SetHTTPHeaderField(HTTPNames::Sec_COWL, AtomicString(ctx_header));
+}
+
 void COWL::LogToConsole(const String& message,
     MessageLevel level) const {
   LogToConsole(ConsoleMessage::Create(kSecurityMessageSource, level, message));

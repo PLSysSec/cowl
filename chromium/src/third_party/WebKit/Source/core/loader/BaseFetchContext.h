@@ -89,6 +89,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   // Utility method that can be used to implement other methods.
   void PrintAccessDeniedMessage(const KURL&) const;
   void AddCSPHeaderIfNecessary(Resource::Type, ResourceRequest&);
+  void AddCOWLHeader(ResourceRequest&);
 
   ResourceRequestBlockedReason CheckCOWLForRequest(
       const ResourceRequest&,
