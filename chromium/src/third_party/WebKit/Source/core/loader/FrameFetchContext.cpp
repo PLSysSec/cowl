@@ -180,7 +180,7 @@ struct FrameFetchContext::FrozenState final
               RefPtr<const SecurityOrigin> parent_security_origin,
               const Optional<WebAddressSpace>& address_space,
               const ContentSecurityPolicy* content_security_policy,
-              const COWL* cowl,
+              COWL* cowl,
               KURL first_party_for_cookies,
               RefPtr<SecurityOrigin> requestor_origin,
               RefPtr<SecurityOrigin> requestor_origin_for_frame_loading,
@@ -213,7 +213,7 @@ struct FrameFetchContext::FrozenState final
   const RefPtr<const SecurityOrigin> parent_security_origin;
   const Optional<WebAddressSpace> address_space;
   const Member<const ContentSecurityPolicy> content_security_policy;
-  const Member<const COWL> cowl;
+  Member<COWL> cowl;
   const KURL first_party_for_cookies;
   const RefPtr<SecurityOrigin> requestor_origin;
   const RefPtr<SecurityOrigin> requestor_origin_for_frame_loading;
@@ -1027,7 +1027,7 @@ const ContentSecurityPolicy* FrameFetchContext::GetContentSecurityPolicy()
   return document_ ? document_->GetContentSecurityPolicy() : nullptr;
 }
 
-const COWL* FrameFetchContext::GetCOWL()
+COWL* FrameFetchContext::GetCOWL()
     const {
   if (IsDetached())
     return frozen_state_->cowl;

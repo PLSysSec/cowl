@@ -23,6 +23,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -41,7 +42,6 @@ COWL::~COWL() {}
 
 void COWL::BindToExecutionContext(ExecutionContext* execution_context) {
   execution_context_ = execution_context;
-  ApplyPolicySideEffectsToExecutionContext();
 }
 
 void COWL::SetupSelf(const SecurityOrigin& security_origin) {
@@ -57,7 +57,7 @@ void COWL::ApplyPolicySideEffectsToExecutionContext() {
   SetupSelf(*execution_context_->GetSecurityContext().GetSecurityOrigin());
 }
 
-bool COWL::LabelRaiseWillResultInStuckContext(Label* conf, Privilege* priv) {
+bool COWL::LabelRaiseWillResultInStuckContext(Label* conf, Privilege* priv) const {
   LocalFrame* frame = execution_context_->ExecutingWindow()->GetFrame();
   if (!frame)
     return false;
@@ -70,10 +70,9 @@ bool COWL::LabelRaiseWillResultInStuckContext(Label* conf, Privilege* priv) {
   return !effective_label->IsEmpty();
 }
 
-bool COWL::WriteCheck(Label* obj_conf, Label* obj_int) {
-  Privilege* priv = privilege_;
-  Label* current_conf = confidentiality_->Downgrade(priv);
-  Label* current_int = integrity_->Upgrade(priv);
+bool COWL::WriteCheck(Label* obj_conf, Label* obj_int) const {
+  Label* current_conf = confidentiality_->Downgrade(privilege_);
+  Label* current_int = integrity_->Upgrade(privilege_);
 
   if (!obj_conf->subsumes(current_conf) || !current_int->subsumes(obj_int))
     return false;
@@ -85,7 +84,7 @@ bool COWL::AllowRequest(
     const ResourceRequest& request,
     SecurityViolationReportingPolicy reporting_policy) const {
 
-  if (!IsEnabled()) return true;
+  if (!enabled_) return true;
 
   RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(request.Url());
 
@@ -105,6 +104,99 @@ bool COWL::AllowRequest(
     LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
                                         kErrorMessageLevel,
                                         message));
+  }
+  return false;
+}
+
+bool COWL::AllowResponse(const ResourceRequest& request,
+                         const ResourceResponse& response) {
+  const AtomicString& sec_cowl = response.HttpHeaderField(HTTPNames::Sec_COWL);
+  if (sec_cowl.IsEmpty())
+    return true;
+
+  CommaDelimitedHeaderSet headers;
+  ParseCommaDelimitedHeader(sec_cowl, headers);
+
+  String ctx_header, data_header;
+
+  for (String header : headers) {
+    if (header.StartsWith("ctx"))
+      ctx_header = header;
+    if (header.StartsWith("data"))
+      data_header = header;
+  }
+
+  WebURLRequest::RequestContext request_context = request.GetRequestContext();
+  if (request_context == WebURLRequest::kRequestContextLocation ||
+      request_context == WebURLRequest::kRequestContextWorker ||
+      request_context == WebURLRequest::kRequestContextServiceWorker ||
+      (request_context == WebURLRequest::kRequestContextInternal &&
+      request.GetFrameType() == WebURLRequest::kFrameTypeTopLevel)) {
+
+    String self = SecurityOrigin::Create(response.Url())->ToString();
+
+    Label* conf; Label* integrity; Privilege* priv;
+    COWLParser::parseLabeledContextHeader(ctx_header, self, conf, integrity, priv);
+
+    if (!conf || !integrity || !priv) {
+      String message = "COWL::The server supplied a malformed Sec-COWL header.";
+      LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
+            kErrorMessageLevel,
+            message));
+      return false;
+    }
+
+    // If priv is not a delegated privilege of the state context privilege, return blocked 
+    if (!privilege_->asLabel()->subsumes(priv->asLabel())) {
+      String message = "COWL::The server supplied a privilege that it is not trusted for.";
+      LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
+            kErrorMessageLevel,
+            message));
+      return false;
+    }
+
+    Label* effective_label = conf->Downgrade(priv);
+    if (!effective_label->IsEmpty()) {
+      String message = "COWL::the server supplied a confidentiality label and privilege pair"
+        "that would have led to a top-level stuck context.";
+      LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
+            kErrorMessageLevel,
+            message));
+      return false;
+    }
+
+    Label* effective_int = integrity_->Upgrade(privilege_);
+    if (!effective_int->subsumes(integrity)) {
+      String message = "COWL::The server supplied an integrity label that it is not trusted for.";
+      LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
+            kErrorMessageLevel,
+            message));
+      return false;
+    }
+
+    enabled_ = true;;
+    confidentiality_ = conf;
+    integrity_ = integrity;
+    privilege_ = priv;
+
+    return true;
+
+  } else {
+    String self = SecurityOrigin::Create(response.Url())->ToString();
+    Label* conf; Label* integrity;
+    COWLParser::parseLabeledDataHeader(data_header, self, conf, integrity);
+
+    if (!conf || !integrity) {
+      String message = "COWL::The server supplied a malformed Sec-COWL header.";
+      LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
+            kErrorMessageLevel,
+            message));
+      return false;
+    }
+
+    Label* effective_conf = conf->Downgrade(privilege_);
+    if (confidentiality_->subsumes(effective_conf) && integrity->subsumes(integrity_))
+      return true;
   }
   return false;
 }

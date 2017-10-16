@@ -206,7 +206,7 @@ const ContentSecurityPolicy* WorkerFetchContext::GetContentSecurityPolicy()
   return global_scope_->GetContentSecurityPolicy();
 }
 
-const COWL* WorkerFetchContext::GetCOWL()
+COWL* WorkerFetchContext::GetCOWL()
     const {
   return global_scope_->GetCOWL();
 }

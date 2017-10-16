@@ -49,7 +49,6 @@ LabeledObject* LabeledObject::Create(ScriptState* script_state, ScriptValue obj,
   return new LabeledObject(obj_clone, confidentiality, integrity);
 }
 
-
 LabeledObject::LabeledObject(ScriptValue obj, Label* conf, Label* integrity)
   : obj_(obj),
     confidentiality_(conf),

@@ -82,7 +82,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual const SecurityOrigin* GetParentSecurityOrigin() const = 0;
   virtual Optional<WebAddressSpace> GetAddressSpace() const = 0;
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
-  virtual const COWL* GetCOWL() const = 0;
+  virtual COWL* GetCOWL() const = 0;
 
   virtual void AddConsoleMessage(ConsoleMessage*) const = 0;
 
@@ -97,6 +97,10 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
       ResourceRequest::RedirectStatus) const;
+
+  ResourceRequestBlockedReason CheckCOWLForResponse(
+      const ResourceRequest&,
+      const ResourceResponse&) const;
 
  private:
   // Utility methods that are used in default implement for CanRequest,

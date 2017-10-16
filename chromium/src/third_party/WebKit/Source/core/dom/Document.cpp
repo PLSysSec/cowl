@@ -5827,6 +5827,7 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     cookie_url_ = KURL(kParsedURLString, g_empty_string);
     SetSecurityOrigin(SecurityOrigin::CreateUnique());
     InitContentSecurityPolicy();
+    InitCOWL(GetCOWL());
     SetFeaturePolicy(g_empty_string);
     // Unique security origins cannot have a suborigin
     return;
@@ -5898,6 +5899,7 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
         ImportsController()->Master()->GetContentSecurityPolicy());
   } else {
     InitContentSecurityPolicy(nullptr, policy_to_inherit);
+    InitCOWL(GetCOWL());
   }
 
   if (GetSecurityOrigin()->HasSuborigin())
@@ -5930,14 +5932,12 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     EnforceSuborigin(*GetSecurityOrigin()->GetSuborigin());
 
   SetFeaturePolicy(g_empty_string);
-
-  // Initialize COWL 
-  InitCOWL();
 }
 
 void Document::InitCOWL(COWL* cowl) {
   SetCOWL(cowl ? cowl : COWL::Create());
   GetCOWL()->BindToExecutionContext(this);
+  if (!cowl) GetCOWL()->ApplyPolicySideEffectsToExecutionContext();
 }
 
 // the first parameter specifies a policy to use as the document csp meaning

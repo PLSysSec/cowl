@@ -32,6 +32,7 @@ namespace blink {
 class ConsoleMessage;
 class ExecutionContext;
 class ResourceRequest;
+class ResourceResponse;
 class SecurityOrigin;
 
 class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL> {
@@ -45,12 +46,15 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL> {
   void SetupSelf(const SecurityOrigin&);
   void ApplyPolicySideEffectsToExecutionContext();
 
-  bool LabelRaiseWillResultInStuckContext(Label*, Privilege*);
-  bool WriteCheck(Label*, Label*);
+  bool LabelRaiseWillResultInStuckContext(Label*, Privilege*) const;
+  bool WriteCheck(Label*, Label*) const;
 
   bool AllowRequest(const ResourceRequest&,
                     SecurityViolationReportingPolicy =
                     SecurityViolationReportingPolicy::kReport) const;
+
+  bool AllowResponse(const ResourceRequest&,
+                     const ResourceResponse&);
 
   void AddCtxHeader(ResourceRequest&);
 

@@ -111,7 +111,7 @@ void BaseFetchContext::AddCSPHeaderIfNecessary(Resource::Type type,
 }
 
 void BaseFetchContext::AddCOWLHeader(ResourceRequest& request) {
-  const COWL* cowl = GetCOWL();
+  COWL* cowl = GetCOWL();
   if (!cowl)
     return;
 
@@ -157,11 +157,20 @@ ResourceRequestBlockedReason BaseFetchContext::CheckCOWLForRequest(
     const ResourceLoaderOptions& options,
     SecurityViolationReportingPolicy reporting_policy,
     ResourceRequest::RedirectStatus redirect_status) const {
-  const COWL* cowl = GetCOWL();
-  if (cowl && !cowl->AllowRequest(request,
-                                  reporting_policy)) {
+  COWL* cowl = GetCOWL();
+  if (cowl && !cowl->AllowRequest(request, reporting_policy))
     return ResourceRequestBlockedReason::kCOWL;
-  }
+
+  return ResourceRequestBlockedReason::kNone;
+}
+
+ResourceRequestBlockedReason BaseFetchContext::CheckCOWLForResponse(
+    const ResourceRequest& request,
+    const ResourceResponse& response) const {
+  COWL* cowl = GetCOWL();
+  if (cowl && !cowl->AllowResponse(request, response))
+    return ResourceRequestBlockedReason::kCOWL;
+
   return ResourceRequestBlockedReason::kNone;
 }
 
