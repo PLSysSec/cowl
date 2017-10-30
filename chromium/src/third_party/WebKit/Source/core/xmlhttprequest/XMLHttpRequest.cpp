@@ -485,7 +485,7 @@ LabeledObject* XMLHttpRequest::ResponseLabeledObject(ExceptionState& exception_s
 }
 
 Blob* XMLHttpRequest::ResponseBlob() {
-  if (!ResponseIsLabeledObject())
+  if (ResponseIsLabeledObject())
     return nullptr;
 
   DCHECK_EQ(response_type_code_, kResponseTypeBlob);
@@ -527,7 +527,7 @@ Blob* XMLHttpRequest::ResponseBlob() {
 }
 
 DOMArrayBuffer* XMLHttpRequest::ResponseArrayBuffer() {
-  if (!ResponseIsLabeledObject())
+  if (ResponseIsLabeledObject())
     return nullptr;
 
   DCHECK_EQ(response_type_code_, kResponseTypeArrayBuffer);
