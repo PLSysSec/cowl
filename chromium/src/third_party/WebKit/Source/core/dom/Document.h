@@ -1047,6 +1047,7 @@ class CORE_EXPORT Document : public ContainerNode,
       const ContentSecurityPolicy* policy_to_inherit = nullptr);
 
   void InitCOWL(COWL* = nullptr);
+  bool IsCOWLAttributeEnabled();
 
   bool IsSecureTransitionTo(const KURL&) const;
 

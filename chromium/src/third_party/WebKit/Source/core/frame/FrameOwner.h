@@ -50,6 +50,7 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
   virtual bool AllowPaymentRequest() const = 0;
   virtual bool IsDisplayNone() const = 0;
   virtual AtomicString Csp() const = 0;
+  virtual bool Cowl() const = 0;
   virtual const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const = 0;
   virtual const WebParsedFeaturePolicy& ContainerPolicy() const = 0;
 };
@@ -85,6 +86,7 @@ class CORE_EXPORT DummyFrameOwner
   bool AllowPaymentRequest() const override { return false; }
   bool IsDisplayNone() const override { return false; }
   AtomicString Csp() const override { return g_null_atom; }
+  bool Cowl() const override { return false; }
   const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const override {
     DEFINE_STATIC_LOCAL(WebVector<WebFeaturePolicyFeature>, features, ());
     return features;

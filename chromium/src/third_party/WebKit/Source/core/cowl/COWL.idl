@@ -23,7 +23,7 @@
 ] interface COWL {
 
   // Enable confinement for compartment, if not enabled.
-  [CallWith=ScriptState] static void enable();
+  // [CallWith=ScriptState] static void enable();
   [CallWith=ScriptState] static boolean isEnabled();
 
   // Current label

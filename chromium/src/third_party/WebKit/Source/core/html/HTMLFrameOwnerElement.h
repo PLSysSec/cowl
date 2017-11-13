@@ -101,6 +101,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   bool AllowPaymentRequest() const override { return false; }
   bool IsDisplayNone() const override { return !embedded_content_view_; }
   AtomicString Csp() const override { return g_null_atom; }
+  bool Cowl() const override { return false; }
   const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const override;
   const WebParsedFeaturePolicy& ContainerPolicy() const override;
 

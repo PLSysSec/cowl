@@ -5836,6 +5836,10 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
   // In the common case, create the security context from the currently
   // loading URL with a fresh content security policy.
   EnforceSandboxFlags(initializer.GetSandboxFlags());
+
+  if (IsCOWLAttributeEnabled())
+    EnforceSandboxFlags(COWL::GetSandboxFlags());
+
   SetInsecureRequestPolicy(initializer.GetInsecureRequestPolicy());
   if (initializer.InsecureNavigationsToUpgrade()) {
     for (auto to_upgrade : *initializer.InsecureNavigationsToUpgrade())
@@ -5932,12 +5936,22 @@ void Document::InitSecurityContext(const DocumentInit& initializer) {
     EnforceSuborigin(*GetSecurityOrigin()->GetSuborigin());
 
   SetFeaturePolicy(g_empty_string);
+
 }
 
 void Document::InitCOWL(COWL* cowl) {
   SetCOWL(cowl ? cowl : COWL::Create());
   GetCOWL()->BindToExecutionContext(this);
+
   if (!cowl) GetCOWL()->ApplyPolicySideEffectsToExecutionContext();
+  if (IsCOWLAttributeEnabled()) GetCOWL()->Enable();
+}
+
+bool Document::IsCOWLAttributeEnabled() {
+  if (frame_  && !frame_->IsMainFrame() && frame_->Owner())
+    return frame_->Owner()->Cowl();
+
+  return false;
 }
 
 // the first parameter specifies a policy to use as the document csp meaning

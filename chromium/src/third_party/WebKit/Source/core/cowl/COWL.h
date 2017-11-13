@@ -61,6 +61,8 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL> {
   void LogToConsole(const String& message, MessageLevel = kErrorMessageLevel) const;
   void LogToConsole(ConsoleMessage*, LocalFrame* = nullptr) const;
 
+  static SandboxFlags GetSandboxFlags();
+
   bool IsEnabled() const;
   Label* GetConfidentiality() const;
   Label* GetIntegrity() const;

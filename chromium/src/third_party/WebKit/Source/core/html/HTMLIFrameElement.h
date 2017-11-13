@@ -81,6 +81,7 @@ class CORE_EXPORT HTMLIFrameElement final
   bool AllowFullscreen() const override { return allow_fullscreen_; }
   bool AllowPaymentRequest() const override { return allow_payment_request_; }
   AtomicString Csp() const override { return csp_; }
+  bool Cowl() const override { return cowl_; }
   const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const override {
     return allowed_features_;
   }
@@ -90,6 +91,7 @@ class CORE_EXPORT HTMLIFrameElement final
   bool did_load_non_empty_document_;
   bool allow_fullscreen_;
   bool allow_payment_request_;
+  bool cowl_;
   bool collapsed_by_client_;
   Member<HTMLIFrameElementSandbox> sandbox_;
   Member<HTMLIFrameElementAllow> allow_;

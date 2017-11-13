@@ -29,6 +29,7 @@ interface HTMLIFrameElement : HTMLElement {
     [CEReactions, Reflect] attribute boolean allowFullscreen;
     [CEReactions, Reflect] attribute DOMString width;
     [CEReactions, Reflect] attribute DOMString height;
+    [CEReactions, Reflect] attribute boolean cowl;
 
     [CheckSecurity=ReturnValue] readonly attribute Document? contentDocument;
     readonly attribute Window? contentWindow;
