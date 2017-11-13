@@ -30,6 +30,7 @@
 #include "core/loader/DocumentLoader.h"
 
 #include <memory>
+#include "core/cowl/COWL.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentParser.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -159,6 +160,7 @@ DEFINE_TRACE(DocumentLoader) {
   visitor->Trace(document_load_timing_);
   visitor->Trace(application_cache_host_);
   visitor->Trace(content_security_policy_);
+  visitor->Trace(cowl_);
   RawResourceClient::Trace(visitor);
 }
 
@@ -545,6 +547,7 @@ void DocumentLoader::CancelLoadAfterCSPDenied(
   // https://crbug.com/555418.
   ClearMainResourceHandle();
   content_security_policy_.Clear();
+  cowl_.Clear();
   KURL blocked_url = SecurityOrigin::UrlWithUniqueSecurityOrigin();
   original_request_.SetURL(blocked_url);
   request_.SetURL(blocked_url);
@@ -611,6 +614,16 @@ void DocumentLoader::ResponseReceived(
         CancelLoadAfterCSPDenied(response);
         return;
       }
+    }
+  }
+
+  const AtomicString& sec_cowl = response.HttpHeaderField(HTTPNames::Sec_COWL);
+  if (!sec_cowl.IsEmpty()) {
+    cowl_ = COWL::Create();
+    cowl_->SetupSelf(*SecurityOrigin::Create(response.Url()));
+    if (!cowl_->AllowResponse(original_request_, response)) {
+      CancelLoadAfterCSPDenied(response);
+      return;
     }
   }
 
@@ -903,6 +916,9 @@ void DocumentLoader::DidInstallNewDocument(Document* document,
   document->SetReadyState(Document::kLoading);
   if (content_security_policy_) {
     document->InitContentSecurityPolicy(content_security_policy_.Release());
+  }
+  if (cowl_) {
+    document->InitCOWL(cowl_.Release());
   }
 
   if (history_item_ && IsBackForwardLoadType(load_type_))

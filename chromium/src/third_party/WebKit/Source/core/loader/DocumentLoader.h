@@ -33,6 +33,7 @@
 #include <memory>
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/CoreExport.h"
+#include "core/cowl/COWL.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/frame/FrameTypes.h"
@@ -337,6 +338,7 @@ class CORE_EXPORT DocumentLoader
       service_worker_network_provider_;
 
   Member<ContentSecurityPolicy> content_security_policy_;
+  Member<COWL> cowl_;
   ClientHintsPreferences client_hints_preferences_;
   InitialScrollState initial_scroll_state_;
 
