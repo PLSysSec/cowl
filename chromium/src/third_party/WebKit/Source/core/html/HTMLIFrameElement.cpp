@@ -25,13 +25,13 @@
 #include "core/html/HTMLIFrameElement.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/HTMLNames.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLDocument.h"
+#include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutIFrame.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -39,17 +39,14 @@ using namespace HTMLNames;
 
 inline HTMLIFrameElement::HTMLIFrameElement(Document& document)
     : HTMLFrameElementBase(iframeTag, document),
-      did_load_non_empty_document_(false),
       collapsed_by_client_(false),
       sandbox_(HTMLIFrameElementSandbox::Create(this)),
-      allow_(HTMLIFrameElementAllow::Create(this)),
       referrer_policy_(kReferrerPolicyDefault) {}
 
 DEFINE_NODE_FACTORY(HTMLIFrameElement)
 
-DEFINE_TRACE(HTMLIFrameElement) {
+void HTMLIFrameElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(sandbox_);
-  visitor->Trace(allow_);
   HTMLFrameElementBase::Trace(visitor);
   Supplementable<HTMLIFrameElement>::Trace(visitor);
 }
@@ -72,10 +69,6 @@ DOMTokenList* HTMLIFrameElement::sandbox() const {
   return sandbox_.Get();
 }
 
-DOMTokenList* HTMLIFrameElement::allow() const {
-  return allow_.Get();
-}
-
 bool HTMLIFrameElement::IsPresentationAttribute(
     const QualifiedName& name) const {
   if (name == widthAttr || name == heightAttr || name == alignAttr ||
@@ -87,7 +80,7 @@ bool HTMLIFrameElement::IsPresentationAttribute(
 void HTMLIFrameElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
-    MutableStylePropertySet* style) {
+    MutableCSSPropertyValueSet* style) {
   if (name == widthAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyWidth, value);
   } else if (name == heightAttr) {
@@ -117,8 +110,8 @@ void HTMLIFrameElement::ParseAttribute(
   if (name == nameAttr) {
     if (IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
       HTMLDocument& document = ToHTMLDocument(this->GetDocument());
-      document.RemoveExtraNamedItem(name_);
-      document.AddExtraNamedItem(value);
+      document.RemoveNamedItem(name_);
+      document.AddNamedItem(value);
     }
     AtomicString old_name = name_;
     name_ = value;
@@ -182,23 +175,34 @@ void HTMLIFrameElement::ParseAttribute(
           "'csp' attribute is not a valid policy: " + value));
       return;
     }
-    AtomicString old_csp = csp_;
-    csp_ = value;
-    if (csp_ != old_csp)
+    if (csp_ != value) {
+      csp_ = value;
       FrameOwnerPropertiesChanged();
+    }
   } else if (RuntimeEnabledFeatures::FeaturePolicyEnabled() &&
              name == allowAttr) {
-    allow_->DidUpdateAttributeValue(params.old_value, value);
-    String invalid_tokens;
-    allowed_features_ = allow_->ParseAllowedFeatureNames(invalid_tokens);
-    if (!invalid_tokens.IsNull()) {
-      GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-          kOtherMessageSource, kErrorMessageLevel,
-          "Error while parsing the 'allow' attribute: " + invalid_tokens));
+    if (allow_ != value) {
+      allow_ = value;
+      Vector<String> messages;
+      bool old_syntax = false;
+      UpdateContainerPolicy(&messages, &old_syntax);
+      if (!messages.IsEmpty()) {
+        for (const String& message : messages) {
+          GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+              kOtherMessageSource, kWarningMessageLevel, message));
+        }
+      }
+      if (!value.IsEmpty()) {
+        if (old_syntax) {
+          UseCounter::Count(
+              GetDocument(),
+              WebFeature::kFeaturePolicyAllowAttributeDeprecatedSyntax);
+        } else {
+          UseCounter::Count(GetDocument(),
+                            WebFeature::kFeaturePolicyAllowAttribute);
+        }
+      }
     }
-    FrameOwnerPropertiesChanged();
-    UpdateContainerPolicy();
-    UseCounter::Count(GetDocument(), WebFeature::kFeaturePolicyAllowAttribute);
   } else {
     if (name == srcAttr)
       LogUpdateAttributeIfIsolatedWorldAndInDocument("iframe", params);
@@ -206,34 +210,32 @@ void HTMLIFrameElement::ParseAttribute(
   }
 }
 
-Vector<WebParsedFeaturePolicyDeclaration>
-HTMLIFrameElement::ConstructContainerPolicy() const {
-  RefPtr<SecurityOrigin> origin = GetOriginForFeaturePolicy();
-  Vector<WebParsedFeaturePolicyDeclaration> container_policy;
-
-  // Populate the initial container policy from the allow attribute.
-  for (const WebFeaturePolicyFeature feature : AllowedFeatures()) {
-    WebParsedFeaturePolicyDeclaration whitelist;
-    whitelist.feature = feature;
-    whitelist.origins = Vector<WebSecurityOrigin>(1UL, {origin});
-    container_policy.push_back(whitelist);
-  }
+ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
+    Vector<String>* messages,
+    bool* old_syntax) const {
+  scoped_refptr<SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
+  scoped_refptr<SecurityOrigin> self_origin = GetDocument().GetSecurityOrigin();
+  ParsedFeaturePolicy container_policy = ParseFeaturePolicyAttribute(
+      allow_, self_origin, src_origin, messages, old_syntax);
 
   // If allowfullscreen attribute is present and no fullscreen policy is set,
   // enable the feature for all origins.
   if (AllowFullscreen()) {
     bool has_fullscreen_policy = false;
     for (const auto& declaration : container_policy) {
-      if (declaration.feature == WebFeaturePolicyFeature::kFullscreen) {
+      if (declaration.feature == FeaturePolicyFeature::kFullscreen) {
         has_fullscreen_policy = true;
+        if (messages) {
+          messages->push_back(
+              "allow attribute is overriding 'allowfullscreen'.");
+        }
         break;
       }
     }
     if (!has_fullscreen_policy) {
-      WebParsedFeaturePolicyDeclaration whitelist;
-      whitelist.feature = WebFeaturePolicyFeature::kFullscreen;
+      ParsedFeaturePolicyDeclaration whitelist;
+      whitelist.feature = FeaturePolicyFeature::kFullscreen;
       whitelist.matches_all_origins = true;
-      whitelist.origins = Vector<WebSecurityOrigin>(0UL);
       container_policy.push_back(whitelist);
     }
   }
@@ -242,16 +244,20 @@ HTMLIFrameElement::ConstructContainerPolicy() const {
   if (AllowPaymentRequest()) {
     bool has_payment_policy = false;
     for (const auto& declaration : container_policy) {
-      if (declaration.feature == WebFeaturePolicyFeature::kPayment) {
+      if (declaration.feature == FeaturePolicyFeature::kPayment) {
         has_payment_policy = true;
+        if (messages) {
+          messages->push_back(
+              "allow attribute is overriding 'allowpaymentrequest'.");
+        }
         break;
       }
     }
     if (!has_payment_policy) {
-      WebParsedFeaturePolicyDeclaration whitelist;
-      whitelist.feature = WebFeaturePolicyFeature::kPayment;
+      ParsedFeaturePolicyDeclaration whitelist;
+      whitelist.feature = FeaturePolicyFeature::kPayment;
       whitelist.matches_all_origins = true;
-      whitelist.origins = Vector<WebSecurityOrigin>(0UL);
+      whitelist.origins = std::vector<url::Origin>(0UL);
       container_policy.push_back(whitelist);
     }
   }
@@ -273,7 +279,7 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
   InsertionNotificationRequest result =
       HTMLFrameElementBase::InsertedInto(insertion_point);
   if (insertion_point->IsInDocumentTree() && GetDocument().IsHTMLDocument())
-    ToHTMLDocument(GetDocument()).AddExtraNamedItem(name_);
+    ToHTMLDocument(GetDocument()).AddNamedItem(name_);
   LogAddElementIfIsolatedWorldAndInDocument("iframe", srcAttr);
   return result;
 }
@@ -281,7 +287,7 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
 void HTMLIFrameElement::RemovedFrom(ContainerNode* insertion_point) {
   HTMLFrameElementBase::RemovedFrom(insertion_point);
   if (insertion_point->IsInDocumentTree() && GetDocument().IsHTMLDocument())
-    ToHTMLDocument(GetDocument()).RemoveExtraNamedItem(name_);
+    ToHTMLDocument(GetDocument()).RemoveNamedItem(name_);
 }
 
 bool HTMLIFrameElement::IsInteractiveContent() const {

@@ -27,8 +27,7 @@
 
 namespace blink {
 
-class CORE_EXPORT COWLInterface final : public GarbageCollected<COWLInterface>,
-                                        public ScriptWrappable {
+class CORE_EXPORT COWLInterface final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -46,7 +45,7 @@ class CORE_EXPORT COWLInterface final : public GarbageCollected<COWLInterface>,
 
   static COWL* GetCOWL(const ScriptState*);
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor*);
 };
 
 }  // namespace blink

@@ -40,7 +40,7 @@ class CORE_EXPORT COWL final : public GarbageCollectedFinalized<COWL> {
  public:
   static COWL* Create();
   ~COWL();
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
   void BindToExecutionContext(ExecutionContext*);
   void SetupSelf(const SecurityOrigin&);

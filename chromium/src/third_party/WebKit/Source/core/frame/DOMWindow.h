@@ -7,7 +7,7 @@
 
 #include "bindings/core/v8/serialization/Transferables.h"
 #include "core/CoreExport.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/Frame.h"
 #include "platform/bindings/TraceWrapperMember.h"
@@ -49,9 +49,9 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   }
 
   // GarbageCollectedFinalized overrides:
-  DECLARE_VIRTUAL_TRACE();
+  virtual void Trace(blink::Visitor*);
 
-  DECLARE_VIRTUAL_TRACE_WRAPPERS();
+  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
 
   virtual bool IsLocalDOMWindow() const = 0;
   virtual bool IsRemoteDOMWindow() const = 0;
@@ -89,7 +89,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   // Indexed properties
   DOMWindow* AnonymousIndexedGetter(uint32_t index) const;
 
-  void postMessage(RefPtr<SerializedScriptValue> message,
+  void postMessage(scoped_refptr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    const String& target_origin,
                    LocalDOMWindow* source,
@@ -116,7 +116,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   explicit DOMWindow(Frame&);
 
   virtual void SchedulePostMessage(MessageEvent*,
-                                   RefPtr<SecurityOrigin> target,
+                                   scoped_refptr<SecurityOrigin> target,
                                    Document* source) = 0;
 
   void DisconnectFromFrame() { frame_ = nullptr; }

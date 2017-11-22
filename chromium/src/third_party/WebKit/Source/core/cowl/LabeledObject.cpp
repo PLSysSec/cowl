@@ -127,7 +127,7 @@ ScriptValue LabeledObject::StructuredClone(ScriptState* script_state,
                                            ExceptionState& exception_state) {
   v8::Isolate* isolate = script_state->GetIsolate();
   v8::Local<v8::Value> value = obj.V8Value();
-  RefPtr<SerializedScriptValue> serialized =
+  scoped_refptr<SerializedScriptValue> serialized =
                                 SerializedScriptValue::SerializeAndSwallowExceptions(isolate, value);
   v8::Local<v8::Value> result = serialized->Deserialize(isolate);
   // If there's a problem during deserialization, result would be null
@@ -139,9 +139,10 @@ ScriptValue LabeledObject::StructuredClone(ScriptState* script_state,
   return obj_clone;
 }
 
-DEFINE_TRACE(LabeledObject) {
+void LabeledObject::Trace(blink::Visitor* visitor) {
   visitor->Trace(confidentiality_);
   visitor->Trace(integrity_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

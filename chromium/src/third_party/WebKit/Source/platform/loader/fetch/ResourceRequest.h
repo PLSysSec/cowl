@@ -29,18 +29,20 @@
 #define ResourceRequest_h
 
 #include <memory>
-#include "platform/HTTPNames.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/http_names.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/Referrer.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/RefCounted.h"
 #include "public/platform/WebAddressSpace.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "services/network/public/interfaces/cors.mojom-blink.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -101,17 +103,17 @@ class PLATFORM_EXPORT ResourceRequest final {
 
   void RemoveUserAndPassFromURL();
 
-  WebCachePolicy GetCachePolicy() const;
-  void SetCachePolicy(WebCachePolicy);
+  mojom::FetchCacheMode GetCacheMode() const;
+  void SetCacheMode(mojom::FetchCacheMode);
 
   double TimeoutInterval() const;  // May return 0 when using platform default.
   void SetTimeoutInterval(double);
 
-  const KURL& FirstPartyForCookies() const;
-  void SetFirstPartyForCookies(const KURL&);
+  const KURL& SiteForCookies() const;
+  void SetSiteForCookies(const KURL&);
 
-  RefPtr<SecurityOrigin> RequestorOrigin() const;
-  void SetRequestorOrigin(RefPtr<SecurityOrigin>);
+  scoped_refptr<SecurityOrigin> RequestorOrigin() const;
+  void SetRequestorOrigin(scoped_refptr<SecurityOrigin>);
 
   const AtomicString& HttpMethod() const;
   void SetHTTPMethod(const AtomicString&);
@@ -159,10 +161,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
 
   EncodedFormData* HttpBody() const;
-  void SetHTTPBody(RefPtr<EncodedFormData>);
-
-  EncodedFormData* AttachedCredential() const;
-  void SetAttachedCredential(RefPtr<EncodedFormData>);
+  void SetHTTPBody(scoped_refptr<EncodedFormData>);
 
   bool AllowStoredCredentials() const;
   void SetAllowStoredCredentials(bool allow_credentials);
@@ -241,8 +240,8 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
 
   // Extra data associated with this request.
-  ExtraData* GetExtraData() const { return extra_data_.Get(); }
-  void SetExtraData(RefPtr<ExtraData> extra_data) {
+  ExtraData* GetExtraData() const { return extra_data_.get(); }
+  void SetExtraData(scoped_refptr<ExtraData> extra_data) {
     extra_data_ = std::move(extra_data);
   }
 
@@ -258,17 +257,17 @@ class PLATFORM_EXPORT ResourceRequest final {
     frame_type_ = frame_type;
   }
 
-  WebURLRequest::FetchRequestMode GetFetchRequestMode() const {
+  network::mojom::FetchRequestMode GetFetchRequestMode() const {
     return fetch_request_mode_;
   }
-  void SetFetchRequestMode(WebURLRequest::FetchRequestMode mode) {
+  void SetFetchRequestMode(network::mojom::FetchRequestMode mode) {
     fetch_request_mode_ = mode;
   }
 
-  WebURLRequest::FetchCredentialsMode GetFetchCredentialsMode() const {
+  network::mojom::FetchCredentialsMode GetFetchCredentialsMode() const {
     return fetch_credentials_mode_;
   }
-  void SetFetchCredentialsMode(WebURLRequest::FetchCredentialsMode mode) {
+  void SetFetchCredentialsMode(network::mojom::FetchCredentialsMode mode) {
     fetch_credentials_mode_ = mode;
   }
 
@@ -311,6 +310,13 @@ class PLATFORM_EXPORT ResourceRequest final {
   bool IsExternalRequest() const { return is_external_request_; }
   void SetExternalRequestStateFromRequestorAddressSpace(WebAddressSpace);
 
+  network::mojom::CORSPreflightPolicy CORSPreflightPolicy() const {
+    return cors_preflight_policy_;
+  }
+  void SetCORSPreflightPolicy(network::mojom::CORSPreflightPolicy policy) {
+    cors_preflight_policy_ = policy;
+  }
+
   void OverrideLoadingIPCType(WebURLRequest::LoadingIPCType loading_ipc_type) {
     loading_ipc_type_ = loading_ipc_type;
   }
@@ -345,12 +351,11 @@ class PLATFORM_EXPORT ResourceRequest final {
   KURL url_;
   double timeout_interval_;  // 0 is a magic value for platform default on
                              // platforms that have one.
-  KURL first_party_for_cookies_;
-  RefPtr<SecurityOrigin> requestor_origin_;
+  KURL site_for_cookies_;
+  scoped_refptr<SecurityOrigin> requestor_origin_;
   AtomicString http_method_;
   HTTPHeaderMap http_header_fields_;
-  RefPtr<EncodedFormData> http_body_;
-  RefPtr<EncodedFormData> attached_credential_;
+  scoped_refptr<EncodedFormData> http_body_;
   bool allow_stored_credentials_ : 1;
   bool report_upload_progress_ : 1;
   bool report_raw_headers_ : 1;
@@ -359,7 +364,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   bool use_stream_on_response_ : 1;
   bool keepalive_ : 1;
   bool should_reset_app_cache_ : 1;
-  WebCachePolicy cache_policy_;
+  mojom::FetchCacheMode cache_mode_;
   WebURLRequest::ServiceWorkerMode service_worker_mode_;
   ResourceLoadPriority priority_;
   int intra_priority_value_;
@@ -367,11 +372,11 @@ class PLATFORM_EXPORT ResourceRequest final {
   int requestor_process_id_;
   int app_cache_host_id_;
   WebURLRequest::PreviewsState previews_state_;
-  RefPtr<ExtraData> extra_data_;
+  scoped_refptr<ExtraData> extra_data_;
   WebURLRequest::RequestContext request_context_;
   WebURLRequest::FrameType frame_type_;
-  WebURLRequest::FetchRequestMode fetch_request_mode_;
-  WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
+  network::mojom::FetchRequestMode fetch_request_mode_;
+  network::mojom::FetchCredentialsMode fetch_credentials_mode_;
   WebURLRequest::FetchRedirectMode fetch_redirect_mode_;
   String fetch_integrity_;
   ReferrerPolicy referrer_policy_;
@@ -379,6 +384,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   bool check_for_browser_side_navigation_;
   double ui_start_time_;
   bool is_external_request_;
+  network::mojom::CORSPreflightPolicy cors_preflight_policy_;
   WebURLRequest::LoadingIPCType loading_ipc_type_;
   bool is_same_document_navigation_;
   InputToLoadPerfMetricReportPolicy input_perf_metric_report_policy_;
@@ -407,15 +413,14 @@ struct CrossThreadResourceRequestData {
   CrossThreadResourceRequestData() {}
   KURL url_;
 
-  WebCachePolicy cache_policy_;
+  mojom::FetchCacheMode cache_mode_;
   double timeout_interval_;
-  KURL first_party_for_cookies_;
-  RefPtr<SecurityOrigin> requestor_origin_;
+  KURL site_for_cookies_;
+  scoped_refptr<SecurityOrigin> requestor_origin_;
 
   String http_method_;
   std::unique_ptr<CrossThreadHTTPHeaderMapData> http_headers_;
-  RefPtr<EncodedFormData> http_body_;
-  RefPtr<EncodedFormData> attached_credential_;
+  scoped_refptr<EncodedFormData> http_body_;
   bool allow_stored_credentials_;
   bool report_upload_progress_;
   bool has_user_gesture_;
@@ -431,8 +436,8 @@ struct CrossThreadResourceRequestData {
   int app_cache_host_id_;
   WebURLRequest::RequestContext request_context_;
   WebURLRequest::FrameType frame_type_;
-  WebURLRequest::FetchRequestMode fetch_request_mode_;
-  WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
+  network::mojom::FetchRequestMode fetch_request_mode_;
+  network::mojom::FetchCredentialsMode fetch_credentials_mode_;
   WebURLRequest::FetchRedirectMode fetch_redirect_mode_;
   String fetch_integrity_;
   WebURLRequest::PreviewsState previews_state_;
@@ -441,6 +446,7 @@ struct CrossThreadResourceRequestData {
   bool check_for_browser_side_navigation_;
   double ui_start_time_;
   bool is_external_request_;
+  network::mojom::CORSPreflightPolicy cors_preflight_policy_;
   WebURLRequest::LoadingIPCType loading_ipc_type_;
   InputToLoadPerfMetricReportPolicy input_perf_metric_report_policy_;
   ResourceRequest::RedirectStatus redirect_status_;

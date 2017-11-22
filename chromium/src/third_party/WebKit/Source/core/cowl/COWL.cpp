@@ -86,7 +86,7 @@ bool COWL::AllowRequest(
 
   if (!enabled_) return true;
 
-  RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(request.Url());
+  scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(request.Url());
 
   Label* effective_conf = confidentiality_->Downgrade(privilege_);
   Label* dst_conf = Label::Create(origin->ToString(), ASSERT_NO_EXCEPTION);
@@ -249,7 +249,7 @@ void COWL::SetConfidentiality(Label* label) { confidentiality_ = label; }
 void COWL::SetIntegrity(Label* label) { integrity_ = label; }
 void COWL::SetPrivilege(Privilege* priv) { privilege_ = priv; }
 
-DEFINE_TRACE(COWL) { 
+void COWL::Trace(blink::Visitor* visitor) {
   visitor->Trace(confidentiality_);
   visitor->Trace(integrity_);
   visitor->Trace(privilege_);

@@ -30,8 +30,7 @@ namespace blink {
 
 class Label;
 
-class LabeledObject final : public GarbageCollectedFinalized<LabeledObject>,
-                            public ScriptWrappable {
+class LabeledObject final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -44,7 +43,7 @@ class LabeledObject final : public GarbageCollectedFinalized<LabeledObject>,
 
   LabeledObject* clone(ScriptState*, CILabel&, ExceptionState&);
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*) override;
 
   // Helper functions
   ScriptValue GetObj();

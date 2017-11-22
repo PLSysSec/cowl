@@ -28,8 +28,7 @@ namespace blink {
 
 class Label;
 
-class CORE_EXPORT Privilege final : public GarbageCollectedFinalized<Privilege>,
-                                    public ScriptWrappable {
+class CORE_EXPORT Privilege final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -41,7 +40,7 @@ class CORE_EXPORT Privilege final : public GarbageCollectedFinalized<Privilege>,
   Privilege* combine(Privilege*) const;
   Privilege* delegate(Label*, ExceptionState&) const;
 
-  DECLARE_TRACE();
+  void Trace(blink::Visitor*);
 
  private:
   Privilege();

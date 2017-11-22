@@ -85,4 +85,8 @@ COWL* COWLInterface::GetCOWL(const ScriptState* script_state) {
   return ExecutionContext::From(script_state)->GetSecurityContext().GetCOWL();
 }
 
+void COWLInterface::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
+}
+
 }  // namespace blink

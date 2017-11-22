@@ -69,6 +69,9 @@ Privilege* Privilege::delegate(Label* label, ExceptionState& exception_state) co
   return new Privilege(label);
 }
 
-DEFINE_TRACE(Privilege) { visitor->Trace(label_); }
+void Privilege::Trace(blink::Visitor* visitor) {
+  visitor->Trace(label_);
+  ScriptWrappable::Trace(visitor);
+}
 
 }  // namespace blink

@@ -30,27 +30,39 @@
 #include "platform/loader/fetch/ResourceLoader.h"
 
 #include "platform/SharedBuffer.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/NetworkInstrumentation.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebCachePolicy.h"
+#include "public/platform/WebCORS.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
+
+static scoped_refptr<WebTaskRunner> GetTaskRunnerFor(
+    const ResourceRequest& request,
+    FetchContext& context) {
+  if (!request.GetKeepalive())
+    return context.GetLoadingTaskRunner();
+  // The loader should be able to work after the frame destruction, so we
+  // cannot use the task runner associated with the frame.
+  return Platform::Current()->CurrentThread()->Scheduler()->LoadingTaskRunner();
+}
 
 ResourceLoader* ResourceLoader::Create(ResourceFetcher* fetcher,
                                        ResourceLoadScheduler* scheduler,
@@ -65,7 +77,11 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher,
       fetcher_(fetcher),
       scheduler_(scheduler),
       resource_(resource),
-      is_cache_aware_loading_activated_(false) {
+      is_cache_aware_loading_activated_(false),
+      cancel_timer_(
+          GetTaskRunnerFor(resource_->GetResourceRequest(), Context()),
+          this,
+          &ResourceLoader::CancelTimerFired) {
   DCHECK(resource_);
   DCHECK(fetcher_);
 
@@ -74,7 +90,7 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher,
 
 ResourceLoader::~ResourceLoader() {}
 
-DEFINE_TRACE(ResourceLoader) {
+void ResourceLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(fetcher_);
   visitor->Trace(scheduler_);
   visitor->Trace(resource_);
@@ -84,7 +100,8 @@ DEFINE_TRACE(ResourceLoader) {
 void ResourceLoader::Start() {
   const ResourceRequest& request = resource_->GetResourceRequest();
   ActivateCacheAwareLoadingIfNeeded(request);
-  loader_ = Context().CreateURLLoader(request);
+  loader_ =
+      Context().CreateURLLoader(request, GetTaskRunnerFor(request, Context()));
 
   // Synchronous requests should not work with a throttling. Also, tentatively
   // disables throttling for fetch requests that could keep on holding an active
@@ -114,14 +131,12 @@ void ResourceLoader::StartWith(const ResourceRequest& request) {
 
   loader_->SetDefersLoading(Context().DefersLoading());
 
-  if (request.GetKeepalive())
-    keepalive_ = this;
-
   if (is_cache_aware_loading_activated_) {
     // Override cache policy for cache-aware loading. If this request fails, a
     // reload with original request will be triggered in DidFail().
     ResourceRequest cache_aware_request(request);
-    cache_aware_request.SetCachePolicy(WebCachePolicy::kReturnCacheDataIfValid);
+    cache_aware_request.SetCacheMode(
+        mojom::FetchCacheMode::kUnspecifiedOnlyIfCachedStrict);
     loader_->LoadAsynchronously(WrappedResourceRequest(cache_aware_request),
                                 this);
     return;
@@ -143,14 +158,15 @@ void ResourceLoader::Release(ResourceLoadScheduler::ReleaseOption option) {
 void ResourceLoader::Restart(const ResourceRequest& request) {
   CHECK_EQ(resource_->Options().synchronous_policy, kRequestAsynchronously);
 
-  keepalive_.Clear();
-  loader_ = Context().CreateURLLoader(request);
+  loader_ =
+      Context().CreateURLLoader(request, GetTaskRunnerFor(request, Context()));
   StartWith(request);
 }
 
 void ResourceLoader::SetDefersLoading(bool defers) {
   DCHECK(loader_);
   loader_->SetDefersLoading(defers);
+  resource_->VirtualTimePauser().PauseVirtualTime(!defers);
 }
 
 void ResourceLoader::DidChangePriority(ResourceLoadPriority load_priority,
@@ -160,6 +176,16 @@ void ResourceLoader::DidChangePriority(ResourceLoadPriority load_priority,
         static_cast<WebURLRequest::Priority>(load_priority),
         intra_priority_value);
   }
+}
+
+void ResourceLoader::ScheduleCancel() {
+  if (!cancel_timer_.IsActive())
+    cancel_timer_.StartOneShot(0, BLINK_FROM_HERE);
+}
+
+void ResourceLoader::CancelTimerFired(TimerBase*) {
+  if (loader_ && !resource_->HasClientsOrObservers())
+    Cancel();
 }
 
 void ResourceLoader::Cancel() {
@@ -186,7 +212,7 @@ static bool IsManualRedirectFetchRequest(const ResourceRequest& request) {
 
 bool ResourceLoader::WillFollowRedirect(
     const WebURL& new_url,
-    const WebURL& new_first_party_for_cookies,
+    const WebURL& new_site_for_cookies,
     const WebString& new_referrer,
     WebReferrerPolicy new_referrer_policy,
     const WebString& new_method,
@@ -201,9 +227,12 @@ bool ResourceLoader::WillFollowRedirect(
     return false;
   }
 
+  // TODO(toyoshim): Move following object copy logic to
+  // ResourceRequest::CreateRedirectRequest() in order to centralize object
+  // clone-ish code.
   const ResourceRequest& last_request = resource_->LastResourceRequest();
   ResourceRequest new_request(new_url);
-  new_request.SetFirstPartyForCookies(new_first_party_for_cookies);
+  new_request.SetSiteForCookies(new_site_for_cookies);
   new_request.SetDownloadToFile(last_request.DownloadToFile());
   new_request.SetUseStreamOnResponse(last_request.UseStreamOnResponse());
   new_request.SetRequestContext(last_request.GetRequestContext());
@@ -226,6 +255,7 @@ bool ResourceLoader::WillFollowRedirect(
     new_request.SetHTTPBody(last_request.HttpBody());
   new_request.SetCheckForBrowserSideNavigation(
       last_request.CheckForBrowserSideNavigation());
+  new_request.SetCORSPreflightPolicy(last_request.CORSPreflightPolicy());
 
   Resource::Type resource_type = resource_->GetType();
 
@@ -234,9 +264,9 @@ bool ResourceLoader::WillFollowRedirect(
   WebURLRequest::RequestContext request_context =
       initial_request.GetRequestContext();
   WebURLRequest::FrameType frame_type = initial_request.GetFrameType();
-  WebURLRequest::FetchRequestMode fetch_request_mode =
+  network::mojom::FetchRequestMode fetch_request_mode =
       initial_request.GetFetchRequestMode();
-  WebURLRequest::FetchCredentialsMode fetch_credentials_mode =
+  network::mojom::FetchCredentialsMode fetch_credentials_mode =
       initial_request.GetFetchCredentialsMode();
 
   const ResourceLoaderOptions& options = resource_->Options();
@@ -272,27 +302,37 @@ bool ResourceLoader::WillFollowRedirect(
 
     if (options.cors_handling_by_resource_fetcher ==
             kEnableCORSHandlingByResourceFetcher &&
-        fetch_request_mode == WebURLRequest::kFetchRequestModeCORS) {
-      RefPtr<SecurityOrigin> source_origin = options.security_origin;
-      if (!source_origin.Get())
+        fetch_request_mode == network::mojom::FetchRequestMode::kCORS) {
+      scoped_refptr<SecurityOrigin> source_origin = options.security_origin;
+      if (!source_origin.get())
         source_origin = Context().GetSecurityOrigin();
-
-      String cors_error_msg;
-      if (!CrossOriginAccessControl::HandleRedirect(
-              source_origin, new_request, redirect_response,
-              fetch_credentials_mode, resource_->MutableOptions(),
-              cors_error_msg)) {
+      WebSecurityOrigin source_web_origin(source_origin.get());
+      WrappedResourceRequest new_request_wrapper(new_request);
+      WTF::Optional<network::mojom::CORSError> cors_error =
+          WebCORS::HandleRedirect(
+              source_web_origin, new_request_wrapper, redirect_response.Url(),
+              redirect_response.HttpStatusCode(),
+              redirect_response.HttpHeaderFields(), fetch_credentials_mode,
+              resource_->MutableOptions());
+      if (cors_error) {
         resource_->SetCORSStatus(CORSStatus::kFailed);
 
         if (!unused_preload) {
-          Context().AddErrorConsoleMessage(cors_error_msg,
-                                           FetchContext::kJSSource);
+          Context().AddErrorConsoleMessage(
+              WebCORS::GetErrorString(
+                  *cors_error, redirect_response.Url(), new_url,
+                  redirect_response.HttpStatusCode(),
+                  redirect_response.HttpHeaderFields(), source_web_origin,
+                  last_request.GetRequestContext()),
+              FetchContext::kJSSource);
         }
 
         CancelForRedirectAccessCheckError(new_url,
                                           ResourceRequestBlockedReason::kOther);
         return false;
       }
+
+      source_origin = source_web_origin;
     }
     if (resource_type == Resource::kImage &&
         fetcher_->ShouldDeferImageLoad(new_url)) {
@@ -309,16 +349,15 @@ bool ResourceLoader::WillFollowRedirect(
 
   if (options.cors_handling_by_resource_fetcher ==
           kEnableCORSHandlingByResourceFetcher &&
-      fetch_request_mode == WebURLRequest::kFetchRequestModeCORS) {
+      fetch_request_mode == network::mojom::FetchRequestMode::kCORS) {
     bool allow_stored_credentials = false;
     switch (fetch_credentials_mode) {
-      case WebURLRequest::kFetchCredentialsModeOmit:
+      case network::mojom::FetchCredentialsMode::kOmit:
         break;
-      case WebURLRequest::kFetchCredentialsModeSameOrigin:
+      case network::mojom::FetchCredentialsMode::kSameOrigin:
         allow_stored_credentials = !options.cors_flag;
         break;
-      case WebURLRequest::kFetchCredentialsModeInclude:
-      case WebURLRequest::kFetchCredentialsModePassword:
+      case network::mojom::FetchCredentialsMode::kInclude:
         allow_stored_credentials = true;
         break;
     }
@@ -335,14 +374,20 @@ bool ResourceLoader::WillFollowRedirect(
 
   Context().PrepareRequest(new_request,
                            FetchContext::RedirectType::kForRedirect);
+  if (Context().GetFrameScheduler()) {
+    ScopedVirtualTimePauser virtual_time_pauser =
+        Context().GetFrameScheduler()->CreateScopedVirtualTimePauser();
+    virtual_time_pauser.PauseVirtualTime(true);
+    resource_->VirtualTimePauser() = std::move(virtual_time_pauser);
+  }
   Context().DispatchWillSendRequest(resource_->Identifier(), new_request,
-                                    redirect_response, options.initiator_info);
+                                    redirect_response, resource_->GetType(),
+                                    options.initiator_info);
 
   // First-party cookie logic moved from DocumentLoader in Blink to
   // net::URLRequest in the browser. Assert that Blink didn't try to change it
   // to something else.
-  DCHECK(KURL(new_first_party_for_cookies) ==
-         new_request.FirstPartyForCookies());
+  DCHECK(KURL(new_site_for_cookies) == new_request.SiteForCookies());
 
   // The following parameters never change during the lifetime of a request.
   DCHECK_EQ(new_request.GetRequestContext(), request_context);
@@ -385,13 +430,13 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
   // Service workers handle CORS separately.
   if (response.WasFetchedViaServiceWorker()) {
     switch (response.ResponseTypeViaServiceWorker()) {
-      case mojom::FetchResponseType::kBasic:
-      case mojom::FetchResponseType::kCORS:
-      case mojom::FetchResponseType::kDefault:
-      case mojom::FetchResponseType::kError:
+      case network::mojom::FetchResponseType::kBasic:
+      case network::mojom::FetchResponseType::kCORS:
+      case network::mojom::FetchResponseType::kDefault:
+      case network::mojom::FetchResponseType::kError:
         return CORSStatus::kServiceWorkerSuccessful;
-      case mojom::FetchResponseType::kOpaque:
-      case mojom::FetchResponseType::kOpaqueRedirect:
+      case network::mojom::FetchResponseType::kOpaque:
+      case network::mojom::FetchResponseType::kOpaqueRedirect:
         return CORSStatus::kServiceWorkerOpaque;
     }
     NOTREACHED();
@@ -400,7 +445,7 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
   if (resource_->GetType() == Resource::Type::kMainResource)
     return CORSStatus::kNotApplicable;
 
-  SecurityOrigin* source_origin = resource_->Options().security_origin.Get();
+  SecurityOrigin* source_origin = resource_->Options().security_origin.get();
 
   if (!source_origin)
     source_origin = Context().GetSecurityOrigin();
@@ -417,8 +462,9 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
   if (resource_->Options().cors_handling_by_resource_fetcher !=
           kEnableCORSHandlingByResourceFetcher ||
       initial_request.GetFetchRequestMode() !=
-          WebURLRequest::kFetchRequestModeCORS)
+          network::mojom::FetchRequestMode::kCORS) {
     return CORSStatus::kNotApplicable;
+  }
 
   // Use the original response instead of the 304 response for a successful
   // revalidation.
@@ -427,12 +473,14 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
           ? resource_->GetResponse()
           : response;
 
-  CrossOriginAccessControl::AccessStatus cors_status =
-      CrossOriginAccessControl::CheckAccess(
-          response_for_access_control,
-          initial_request.GetFetchCredentialsMode(), source_origin);
+  base::Optional<network::mojom::CORSError> cors_error =
+      WebCORS::CheckAccess(response_for_access_control.Url(),
+                           response_for_access_control.HttpStatusCode(),
+                           response_for_access_control.HttpHeaderFields(),
+                           initial_request.GetFetchCredentialsMode(),
+                           WebSecurityOrigin(source_origin));
 
-  if (cors_status == CrossOriginAccessControl::AccessStatus::kAccessAllowed)
+  if (!cors_error)
     return CORSStatus::kSuccessful;
 
   String resource_type = Resource::ResourceTypeToString(
@@ -444,10 +492,11 @@ CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
   error_msg.Append("' from origin '");
   error_msg.Append(source_origin->ToString());
   error_msg.Append("' has been blocked by CORS policy: ");
-
-  CrossOriginAccessControl::AccessControlErrorString(
-      error_msg, cors_status, response_for_access_control, source_origin,
-      initial_request.GetRequestContext());
+  error_msg.Append(WebCORS::GetErrorString(
+      *cors_error, initial_request.Url(), WebURL(),
+      response_for_access_control.HttpStatusCode(),
+      response_for_access_control.HttpHeaderFields(),
+      WebSecurityOrigin(source_origin), initial_request.GetRequestContext()));
 
   return CORSStatus::kFailed;
 }
@@ -463,7 +512,7 @@ void ResourceLoader::DidReceiveResponse(
   // The following parameters never change during the lifetime of a request.
   WebURLRequest::RequestContext request_context =
       initial_request.GetRequestContext();
-  WebURLRequest::FetchRequestMode fetch_request_mode =
+  network::mojom::FetchRequestMode fetch_request_mode =
       initial_request.GetFetchRequestMode();
 
   const ResourceLoaderOptions& options = resource_->Options();
@@ -478,7 +527,7 @@ void ResourceLoader::DidReceiveResponse(
   if (response.WasFetchedViaServiceWorker()) {
     if (options.cors_handling_by_resource_fetcher ==
             kEnableCORSHandlingByResourceFetcher &&
-        fetch_request_mode == WebURLRequest::kFetchRequestModeCORS &&
+        fetch_request_mode == network::mojom::FetchRequestMode::kCORS &&
         response.WasFallbackRequiredByServiceWorker()) {
       ResourceRequest last_request = resource_->LastResourceRequest();
       DCHECK_EQ(last_request.GetServiceWorkerMode(),
@@ -527,7 +576,7 @@ void ResourceLoader::DidReceiveResponse(
     }
   } else if (options.cors_handling_by_resource_fetcher ==
                  kEnableCORSHandlingByResourceFetcher &&
-             fetch_request_mode == WebURLRequest::kFetchRequestModeCORS) {
+             fetch_request_mode == network::mojom::FetchRequestMode::kCORS) {
     if (!resource_->IsSameOriginOrCORSSuccessful()) {
       if (!resource_->IsUnusedPreload())
         Context().AddErrorConsoleMessage(cors_error_msg.ToString(),
@@ -602,7 +651,6 @@ void ResourceLoader::DidFinishLoading(double finish_time,
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);
 
-  keepalive_.Clear();
   Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule);
   loader_.reset();
 
@@ -633,7 +681,6 @@ void ResourceLoader::HandleError(const ResourceError& error) {
     return;
   }
 
-  keepalive_.Clear();
   Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule);
   loader_.reset();
 
@@ -651,7 +698,7 @@ void ResourceLoader::RequestSynchronously(const ResourceRequest& request) {
 
   WrappedResourceRequest request_in(request);
   WebURLResponse response_out;
-  WebURLError error_out;
+  WTF::Optional<WebURLError> error_out;
   WebData data_out;
   int64_t encoded_data_length = WebURLLoaderClient::kUnknownEncodedDataLength;
   int64_t encoded_body_length = 0;
@@ -663,8 +710,8 @@ void ResourceLoader::RequestSynchronously(const ResourceRequest& request) {
   if (!loader_)
     return;
   int64_t decoded_body_length = data_out.size();
-  if (error_out.reason) {
-    DidFail(error_out, encoded_data_length, encoded_body_length,
+  if (error_out) {
+    DidFail(*error_out, encoded_data_length, encoded_body_length,
             decoded_body_length);
     return;
   }
@@ -718,7 +765,11 @@ void ResourceLoader::ActivateCacheAwareLoadingIfNeeded(
     return;
 
   // Don't activate if cache policy is explicitly set.
-  if (request.GetCachePolicy() != WebCachePolicy::kUseProtocolCachePolicy)
+  if (request.GetCacheMode() != mojom::FetchCacheMode::kDefault)
+    return;
+
+  // Don't activate if the page is controlled by service worker.
+  if (fetcher_->IsControlledByServiceWorker())
     return;
 
   is_cache_aware_loading_activated_ = true;

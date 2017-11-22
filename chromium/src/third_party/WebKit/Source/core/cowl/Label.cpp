@@ -248,6 +248,10 @@ void Label::RemoveRolesSubsumedBy(DisjunctionSet& role) {
 
 DisjunctionSetArray Label::GetRoles() { return roles_; }
 
+void Label::Trace(blink::Visitor* visitor) {
+  ScriptWrappable::Trace(visitor);
+}
+
 // Util functions
 DisjunctionSet DisjunctionSetUtils::ConstructDset() {
   DisjunctionSet dset;

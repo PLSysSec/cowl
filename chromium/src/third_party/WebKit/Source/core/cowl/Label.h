@@ -32,13 +32,13 @@ class Privilege;
 typedef Vector<COWLPrincipal> DisjunctionSet;
 typedef Vector<DisjunctionSet> DisjunctionSetArray;
 
-class CORE_EXPORT Label final : public GarbageCollectedFinalized<Label>,
-                                public ScriptWrappable {
+class CORE_EXPORT Label final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static Label* Create(ExceptionState& = ASSERT_NO_EXCEPTION);
   static Label* Create(const String& principal, ExceptionState&);
+
   bool equals(Label*) const;
   bool subsumes(Label*) const;
   bool subsumes(Label*, Privilege*) const;
@@ -60,7 +60,7 @@ class CORE_EXPORT Label final : public GarbageCollectedFinalized<Label>,
   void RemoveRolesSubsumedBy(DisjunctionSet&);
   DisjunctionSetArray GetRoles();
 
-  DEFINE_INLINE_TRACE() {}
+  void Trace(blink::Visitor*);
 
  public:  // XXX TODO make private, unsafe
   DisjunctionSetArray* GetDirectRoles() { return &roles_; }

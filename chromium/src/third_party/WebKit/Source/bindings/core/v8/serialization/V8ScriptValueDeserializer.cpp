@@ -26,7 +26,6 @@
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMSharedArrayBuffer.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/DateMath.h"
 #include "public/platform/WebBlobInfo.h"
@@ -88,7 +87,7 @@ size_t ReadVersionEnvelope(SerializedScriptValue* serialized_script_value,
 }  // namespace
 
 V8ScriptValueDeserializer::V8ScriptValueDeserializer(
-    RefPtr<ScriptState> script_state,
+    scoped_refptr<ScriptState> script_state,
     UnpackedSerializedScriptValue* unpacked_value,
     const Options& options)
     : V8ScriptValueDeserializer(std::move(script_state),
@@ -97,8 +96,8 @@ V8ScriptValueDeserializer::V8ScriptValueDeserializer(
                                 options) {}
 
 V8ScriptValueDeserializer::V8ScriptValueDeserializer(
-    RefPtr<ScriptState> script_state,
-    RefPtr<SerializedScriptValue> value,
+    scoped_refptr<ScriptState> script_state,
+    scoped_refptr<SerializedScriptValue> value,
     const Options& options)
     : V8ScriptValueDeserializer(std::move(script_state),
                                 nullptr,
@@ -111,9 +110,9 @@ V8ScriptValueDeserializer::V8ScriptValueDeserializer(
 }
 
 V8ScriptValueDeserializer::V8ScriptValueDeserializer(
-    RefPtr<ScriptState> script_state,
+    scoped_refptr<ScriptState> script_state,
     UnpackedSerializedScriptValue* unpacked_value,
-    RefPtr<SerializedScriptValue> value,
+    scoped_refptr<SerializedScriptValue> value,
     const Options& options)
     : script_state_(std::move(script_state)),
       unpacked_value_(unpacked_value),
@@ -140,7 +139,7 @@ v8::Local<v8::Value> V8ScriptValueDeserializer::Deserialize() {
   v8::Local<v8::Context> context = script_state_->GetContext();
 
   size_t version_envelope_size =
-      ReadVersionEnvelope(serialized_script_value_.Get(), &version_);
+      ReadVersionEnvelope(serialized_script_value_.get(), &version_);
   if (version_envelope_size) {
     const void* blink_envelope;
     bool read_envelope = ReadRawBytes(version_envelope_size, &blink_envelope);
@@ -227,8 +226,12 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       if (!ReadUint32(&index) || index >= blob_info_array_->size())
         return nullptr;
       const WebBlobInfo& info = (*blob_info_array_)[index];
-      return Blob::Create(
-          GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size()));
+      auto blob_handle = info.GetBlobHandle();
+      if (!blob_handle) {
+        blob_handle =
+            GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size());
+      }
+      return Blob::Create(blob_handle);
     }
     case kFileTag:
       return ReadFile();
@@ -265,8 +268,10 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       return file_list;
     }
     case kImageBitmapTag: {
-      SerializedColorSpace canvas_color_space = SerializedColorSpace::kLegacy;
+      SerializedColorSpace canvas_color_space = SerializedColorSpace::kSRGB;
       SerializedPixelFormat canvas_pixel_format = SerializedPixelFormat::kRGBA8;
+      SerializedOpacityMode canvas_opacity_mode =
+          SerializedOpacityMode::kOpaque;
       uint32_t origin_clean = 0, is_premultiplied = 0, width = 0, height = 0,
                byte_length = 0;
       const void* pixels = nullptr;
@@ -289,11 +294,15 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
               if (!ReadUint32Enum<SerializedPixelFormat>(&canvas_pixel_format))
                 return nullptr;
               break;
-            case ImageSerializationTag::kOriginClean:
+            case ImageSerializationTag::kCanvasOpacityModeTag:
+              if (!ReadUint32Enum<SerializedOpacityMode>(&canvas_opacity_mode))
+                return nullptr;
+              break;
+            case ImageSerializationTag::kOriginCleanTag:
               if (!ReadUint32(&origin_clean) || origin_clean > 1)
                 return nullptr;
               break;
-            case ImageSerializationTag::kIsPremultiplied:
+            case ImageSerializationTag::kIsPremultipliedTag:
               if (!ReadUint32(&is_premultiplied) || is_premultiplied > 1)
                 return nullptr;
               break;
@@ -310,6 +319,7 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
         return nullptr;
       CanvasColorParams color_params =
           SerializedColorParams(canvas_color_space, canvas_pixel_format,
+                                canvas_opacity_mode,
                                 SerializedImageDataStorageFormat::kUint8Clamped)
               .GetCanvasColorParams();
       CheckedNumeric<uint32_t> computed_byte_length = width;
@@ -331,7 +341,7 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       return transferred_image_bitmaps[index].Get();
     }
     case kImageDataTag: {
-      SerializedColorSpace canvas_color_space = SerializedColorSpace::kLegacy;
+      SerializedColorSpace canvas_color_space = SerializedColorSpace::kSRGB;
       SerializedImageDataStorageFormat image_data_storage_format =
           SerializedImageDataStorageFormat::kUint8Clamped;
       uint32_t width = 0, height = 0, byte_length = 0;
@@ -363,9 +373,9 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       if (!ReadUint32(&width) || !ReadUint32(&height) ||
           !ReadUint32(&byte_length) || !ReadRawBytes(byte_length, &pixels))
         return nullptr;
-      SerializedColorParams color_params(canvas_color_space,
-                                         SerializedPixelFormat::kRGBA8,
-                                         image_data_storage_format);
+      SerializedColorParams color_params(
+          canvas_color_space, SerializedPixelFormat::kRGBA8,
+          SerializedOpacityMode::kNonOpaque, image_data_storage_format);
       ImageDataStorageFormat storage_format = color_params.GetStorageFormat();
       CheckedNumeric<uint32_t> computed_byte_length = width;
       computed_byte_length *= height;
@@ -400,7 +410,7 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
       v8::Isolate* isolate = script_state_->GetIsolate();
       ExceptionState exception_state(isolate, ExceptionState::kUnknownContext,
           nullptr, nullptr);
-      return LabeledObject::Create(script_state_.Get(), ScriptValue(script_state_.Get(), value), new_labels, exception_state);
+      return LabeledObject::Create(script_state_.get(), ScriptValue(script_state_.get(), value), new_labels, exception_state);
     }
     case kDOMPointTag: {
       double x = 0, y = 0, z = 0, w = 1;
@@ -544,9 +554,14 @@ File* V8ScriptValueDeserializer::ReadFileIndex() {
   const WebBlobInfo& info = (*blob_info_array_)[index];
   // FIXME: transition WebBlobInfo.lastModified to be milliseconds-based also.
   double last_modified_ms = info.LastModified() * kMsPerSecond;
-  return File::CreateFromIndexedSerialization(
-      info.FilePath(), info.FileName(), info.size(), last_modified_ms,
-      GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size()));
+  auto blob_handle = info.GetBlobHandle();
+  if (!blob_handle) {
+    blob_handle =
+        GetOrCreateBlobDataHandle(info.Uuid(), info.GetType(), info.size());
+  }
+  return File::CreateFromIndexedSerialization(info.FilePath(), info.FileName(),
+                                              info.size(), last_modified_ms,
+                                              blob_handle);
 }
 
 Label* V8ScriptValueDeserializer::ReadLabel() {
@@ -570,10 +585,10 @@ Label* V8ScriptValueDeserializer::ReadLabel() {
   return Label::Create(roles);
 }
 
-RefPtr<BlobDataHandle> V8ScriptValueDeserializer::GetOrCreateBlobDataHandle(
-    const String& uuid,
-    const String& type,
-    uint64_t size) {
+scoped_refptr<BlobDataHandle>
+V8ScriptValueDeserializer::GetOrCreateBlobDataHandle(const String& uuid,
+                                                     const String& type,
+                                                     uint64_t size) {
   // The containing ssv may have a BDH for this uuid if this ssv is just being
   // passed from main to worker thread (for example). We use those values when
   // creating the new blob instead of cons'ing up a new BDH.
