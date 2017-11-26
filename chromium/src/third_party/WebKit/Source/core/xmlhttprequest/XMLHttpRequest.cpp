@@ -1942,7 +1942,7 @@ void XMLHttpRequest::ParseDocumentChunk(const char* data, unsigned len) {
 std::unique_ptr<TextResourceDecoder> XMLHttpRequest::CreateDecoder() const {
   const TextResourceDecoderOptions decoder_options_for_utf8_plain_text(
       TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding());
-  if (response_type_code_ == kResponseTypeJSON)
+  if (response_type_code_ == kResponseTypeJSON || response_type_code_ == kResponseTypeLabeledObject)
     return TextResourceDecoder::Create(decoder_options_for_utf8_plain_text);
 
   String final_response_charset = FinalResponseCharset();
