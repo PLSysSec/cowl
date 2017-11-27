@@ -213,7 +213,7 @@ void COWL::AddCtxHeader(ResourceRequest& request) {
       integrity_->toString().Utf8().data(),
       privilege_->asLabel()->toString().Utf8().data()
       );
-  request.SetHTTPHeaderField(HTTPNames::Sec_COWL, AtomicString(ctx_header));
+  request.AddHTTPHeaderField(HTTPNames::Sec_COWL, AtomicString(ctx_header));
 }
 
 void COWL::LogToConsole(const String& message,
