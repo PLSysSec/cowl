@@ -131,13 +131,16 @@ Label* Label::or_(const String& principal, ExceptionState& exception_state) cons
 }
 
 Label* Label::or_(Label* label) const {
-  Label* _this = Clone();
+  Label* result = new Label();
 
   DisjunctionSetArray* other_roles = label->GetDirectRoles();
   for (unsigned i = 0; i < other_roles->size(); ++i) {
+    Label* _this = Clone();
     _this->InternalOr(other_roles->at(i));
+
+    result = result->and_(_this);
   }
-  return _this;
+  return result;
 }
 
 String Label::toString() const {
