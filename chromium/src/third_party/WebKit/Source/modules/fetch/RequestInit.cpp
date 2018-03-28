@@ -12,8 +12,10 @@
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Blob.h"
+#include "bindings/core/v8/V8LabeledObject.h"
 #include "bindings/core/v8/V8FormData.h"
 #include "bindings/core/v8/V8URLSearchParams.h"
+#include "core/cowl/LabeledObject.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
@@ -214,6 +216,11 @@ void RequestInit::SetUpBody(ExecutionContext* context,
   } else if (v8_body->IsArrayBufferView()) {
     body_ = new FormDataBytesConsumer(
         V8ArrayBufferView::ToImpl(v8_body.As<v8::Object>()));
+  } else if (V8LabeledObject::hasInstance(v8_body, isolate)) {
+    LabeledObject* lobj = V8LabeledObject::ToImpl(v8_body.As<v8::Object>());
+    lobj_ = lobj;
+    content_type_ = "application/labeled-json";
+    body_ = new FormDataBytesConsumer(lobj->ToJSON());
   } else if (V8Blob::hasInstance(v8_body, isolate)) {
     scoped_refptr<BlobDataHandle> blob_data_handle =
         V8Blob::ToImpl(v8_body.As<v8::Object>())->GetBlobDataHandle();

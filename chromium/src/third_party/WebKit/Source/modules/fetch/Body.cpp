@@ -9,6 +9,8 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/cowl/COWLParser.h"
+#include "core/cowl/LabeledObject.h"
 #include "core/fileapi/Blob.h"
 #include "core/html/forms/FormData.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
@@ -128,6 +130,62 @@ class BodyJsonConsumer final : public BodyConsumerBase {
   }
 };
 
+class BodyLabeledJsonConsumer final : public BodyConsumerBase {
+  WTF_MAKE_NONCOPYABLE(BodyLabeledJsonConsumer);
+
+ public:
+  explicit BodyLabeledJsonConsumer(ScriptPromiseResolver* resolver)
+      : BodyConsumerBase(resolver) {}
+
+  void DidFetchDataLoadedLabeledJson(const String& ljson, const String& origin) override {
+    if (!Resolver()->GetExecutionContext() ||
+        Resolver()->GetExecutionContext()->IsContextDestroyed())
+      return;
+    ScriptState::Scope scope(Resolver()->GetScriptState());
+    v8::Isolate* isolate = Resolver()->GetScriptState()->GetIsolate();
+    v8::Local<v8::String> ljson_string = V8String(isolate, ljson);
+    v8::TryCatch trycatch(isolate);
+    v8::Local<v8::Value> ljson_value;
+    if (!v8::JSON::Parse(isolate, ljson_string).ToLocal(&ljson_value))
+      Resolver()->Reject(trycatch.Exception());
+
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  v8::Local<v8::Object> response_object = ljson_value.As<v8::Object>();
+
+  v8::Local<v8::Value> conf_value;
+  if (!response_object->Get(context, v8::String::NewFromUtf8(isolate, "confidentiality")).ToLocal(&conf_value))
+    Resolver()->Reject(trycatch.Exception());
+  String conf_expr = ToCoreStringWithNullCheck(conf_value.As<v8::String>());
+
+  v8::Local<v8::Value> integrity_value;
+  if (!response_object->Get(context, v8::String::NewFromUtf8(isolate, "integrity")).ToLocal(&integrity_value))
+    Resolver()->Reject(trycatch.Exception());
+  String integrity_expr = ToCoreStringWithNullCheck(integrity_value.As<v8::String>());
+
+  v8::Local<v8::Value> obj_value;
+  if (!response_object->Get(context, v8::String::NewFromUtf8(isolate, "object")).ToLocal(&obj_value))
+    Resolver()->Reject(trycatch.Exception());
+
+  ScriptValue obj = ScriptValue(Resolver()->GetScriptState(), obj_value);
+
+  Label* conf = COWLParser::ParseLabelExpression(conf_expr, origin);
+  Label* integrity  = COWLParser::ParseLabelExpression(integrity_expr, origin);
+
+  CILabel labels;
+  labels.setConfidentiality(conf);
+  labels.setIntegrity(integrity);
+
+  //ExceptionState exception_state(info.GetIsolate(),
+  //    ExceptionState::kGetterContext,
+  //    "XMLHttpRequest", "response");
+  LabeledObject* lobj = LabeledObject::Create(Resolver()->GetScriptState(), obj, labels,  ASSERT_NO_EXCEPTION);
+  if (!lobj)
+    Resolver()->Reject(trycatch.Exception());
+
+   Resolver()->Resolve(lobj);
+  }
+};
+
 }  // namespace
 
 ScriptPromise Body::arrayBuffer(ScriptState* script_state) {
@@ -146,6 +204,11 @@ ScriptPromise Body::arrayBuffer(ScriptState* script_state) {
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   promise = resolver->Promise();
+
+  if (MimeType() == "application/labeled-json")
+    resolver->Reject(V8ThrowException::CreateError(script_state->GetIsolate(),
+                                                   "The value is only accessible using labeledObject()"));
+
   if (BodyBuffer()) {
     BodyBuffer()->StartLoading(FetchDataLoader::CreateLoaderAsArrayBuffer(),
                                new BodyArrayBufferConsumer(resolver));
@@ -166,6 +229,11 @@ ScriptPromise Body::blob(ScriptState* script_state) {
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   promise = resolver->Promise();
+
+  if (MimeType() == "application/labeled-json")
+    resolver->Reject(V8ThrowException::CreateError(script_state->GetIsolate(),
+                                                   "The value is only accessible using labeledObject()"));
+
   if (BodyBuffer()) {
     BodyBuffer()->StartLoading(
         FetchDataLoader::CreateLoaderAsBlobHandle(MimeType()),
@@ -192,6 +260,11 @@ ScriptPromise Body::formData(ScriptState* script_state) {
   const ParsedContentType parsedTypeWithParameters(ContentType());
   const String parsedType = parsedTypeWithParameters.MimeType().LowerASCII();
   promise = resolver->Promise();
+
+  if (MimeType() == "application/labeled-json")
+    resolver->Reject(V8ThrowException::CreateError(script_state->GetIsolate(),
+                                                   "The value is only accessible using labeledObject()"));
+
   if (parsedType == "multipart/form-data") {
     const String boundary =
         parsedTypeWithParameters.ParameterValueForName("boundary");
@@ -233,9 +306,35 @@ ScriptPromise Body::json(ScriptState* script_state) {
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   promise = resolver->Promise();
+
+  if (MimeType() == "application/labeled-json")
+    resolver->Reject(V8ThrowException::CreateError(script_state->GetIsolate(),
+                                                   "The value is only accessible using labeledObject()"));
+
   if (BodyBuffer()) {
     BodyBuffer()->StartLoading(FetchDataLoader::CreateLoaderAsString(),
                                new BodyJsonConsumer(resolver));
+  } else {
+    resolver->Reject(V8ThrowException::CreateSyntaxError(
+        script_state->GetIsolate(), "Unexpected end of input"));
+  }
+  return promise;
+}
+
+ScriptPromise Body::labeledObject(ScriptState* script_state) {
+  ScriptPromise promise = RejectInvalidConsumption(script_state);
+  if (!promise.IsEmpty())
+    return promise;
+
+  // See above comment.
+  if (!ExecutionContext::From(script_state))
+    return ScriptPromise();
+
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  promise = resolver->Promise();
+  if (BodyBuffer()) {
+    BodyBuffer()->StartLoading(FetchDataLoader::CreateLoaderAsLabeledJson(MimeType(), Origin()),
+                               new BodyLabeledJsonConsumer(resolver));
   } else {
     resolver->Reject(V8ThrowException::CreateSyntaxError(
         script_state->GetIsolate(), "Unexpected end of input"));
@@ -254,6 +353,11 @@ ScriptPromise Body::text(ScriptState* script_state) {
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   promise = resolver->Promise();
+
+  if (MimeType() == "application/labeled-json")
+    resolver->Reject(V8ThrowException::CreateError(script_state->GetIsolate(),
+                                                   "The value is only accessible using labeledObject()"));
+
   if (BodyBuffer()) {
     BodyBuffer()->StartLoading(FetchDataLoader::CreateLoaderAsString(),
                                new BodyTextConsumer(resolver));
@@ -264,6 +368,9 @@ ScriptPromise Body::text(ScriptState* script_state) {
 }
 
 ScriptValue Body::body(ScriptState* script_state) {
+  if (MimeType() == "application/labeled-json")
+    return ScriptValue::CreateNull(script_state);
+
   if (!BodyBuffer())
     return ScriptValue::CreateNull(script_state);
   ScriptValue stream = BodyBuffer()->Stream();

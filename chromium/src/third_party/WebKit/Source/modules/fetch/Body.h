@@ -41,6 +41,7 @@ class MODULES_EXPORT Body : public ScriptWrappable,
   ScriptPromise blob(ScriptState*);
   ScriptPromise formData(ScriptState*);
   ScriptPromise json(ScriptState*);
+  ScriptPromise labeledObject(ScriptState*);
   ScriptPromise text(ScriptState*);
   ScriptValue body(ScriptState*);
   virtual BodyStreamBuffer* BodyBuffer() = 0;
@@ -62,6 +63,7 @@ class MODULES_EXPORT Body : public ScriptWrappable,
   // remove |ContentType()|.
   virtual String ContentType() const = 0;
   virtual String MimeType() const = 0;
+  virtual String Origin() const = 0;
 
   // Body consumption algorithms will reject with a TypeError in a number of
   // error conditions. This method wraps those up into one call which returns

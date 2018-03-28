@@ -379,6 +379,15 @@ Request* Request::CreateRequestWithRequestOrString(
       r->getHeaders()->append(HTTPNames::Content_Type, init.ContentType(),
                               exception_state);
     }
+
+    // COWL stuff
+    if (init.ContentType() == "application/labeled-json" && init.GetLabeledObject()) {
+      if (init.GetLabeledObject()->AllowSend(r->Origin(), exception_state)) {
+          r->getHeaders()->set(HTTPNames::Content_Type, "application/labeled-json", exception_state);
+          r->getHeaders()->AppendCOWL(init.GetLabeledObject()->GetHeader());
+      }
+    }
+
     if (exception_state.HadException())
       return nullptr;
   }

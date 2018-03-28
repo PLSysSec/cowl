@@ -94,6 +94,10 @@ class MODULES_EXPORT Request final : public Body {
   String MimeType() const override;
   void RefreshBody(ScriptState*);
 
+  String Origin() const override {
+    return SecurityOrigin::Create(url())->ToString();
+  }
+
   const Member<FetchRequestData> request_;
   const Member<Headers> headers_;
 };

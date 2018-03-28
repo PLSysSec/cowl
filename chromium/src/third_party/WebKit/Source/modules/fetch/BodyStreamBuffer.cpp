@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/cowl/LabeledObject.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/streams/ReadableStreamDefaultControllerWrapper.h"
@@ -47,6 +48,11 @@ class BodyStreamBuffer::LoaderClient final
   void DidFetchDataLoadedArrayBuffer(DOMArrayBuffer* array_buffer) override {
     buffer_->EndLoading();
     client_->DidFetchDataLoadedArrayBuffer(array_buffer);
+  }
+
+  void DidFetchDataLoadedLabeledJson(const String& ljson, const String& origin) override {
+    buffer_->EndLoading();
+    client_->DidFetchDataLoadedLabeledJson(ljson, origin);
   }
 
   void DidFetchDataLoadedFormData(FormData* form_data) override {

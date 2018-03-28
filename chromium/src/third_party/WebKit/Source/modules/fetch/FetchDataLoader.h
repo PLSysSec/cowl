@@ -5,6 +5,7 @@
 #ifndef FetchDataLoader_h
 #define FetchDataLoader_h
 
+#include "core/cowl/LabeledObject.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/ModulesExport.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -41,6 +42,12 @@ class MODULES_EXPORT FetchDataLoader
     virtual void DidFetchDataLoadedArrayBuffer(DOMArrayBuffer*) {
       NOTREACHED();
     }
+    virtual void DidFetchDataLoadedLabeledJson(const String&, const String&) {
+      NOTREACHED();
+    }
+    virtual void DidFetchDataLoadedLabeledObject(LabeledObject*) {
+      NOTREACHED();
+    }
     virtual void DidFetchDataLoadedFormData(FormData*) { NOTREACHED(); }
     virtual void DidFetchDataLoadedString(const String&) { NOTREACHED(); }
     // This is called after all data are read from |handle| and written
@@ -62,6 +69,7 @@ class MODULES_EXPORT FetchDataLoader
   static FetchDataLoader* CreateLoaderAsFormData(
       const String& multipart_boundary);
   static FetchDataLoader* CreateLoaderAsString();
+  static FetchDataLoader* CreateLoaderAsLabeledJson(const String& mime_type, const String& origin);
   static FetchDataLoader* CreateLoaderAsDataPipe(
       mojo::ScopedDataPipeProducerHandle out_data_pipe);
 

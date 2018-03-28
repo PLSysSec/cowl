@@ -5,6 +5,7 @@
 #include "modules/fetch/FetchDataLoader.h"
 
 #include <memory>
+#include "core/cowl/LabeledObject.h"
 #include "core/fileapi/File.h"
 #include "core/html/forms/FormData.h"
 #include "core/html/parser/TextResourceDecoder.h"
@@ -415,6 +416,80 @@ class FetchDataLoaderAsFormData final : public FetchDataLoader,
   String multipart_boundary_;
 };
 
+class FetchDataLoaderAsLabeledJson final : public FetchDataLoader,
+                                           public BytesConsumer::Client {
+  USING_GARBAGE_COLLECTED_MIXIN(FetchDataLoaderAsLabeledJson);
+
+ public:
+ explicit FetchDataLoaderAsLabeledJson(const String& mime_type, const String& origin)
+       : mime_type_(mime_type), origin_(origin) {}
+  void Start(BytesConsumer* consumer,
+             FetchDataLoader::Client* client) override {
+    DCHECK(!client_);
+    DCHECK(!decoder_);
+    DCHECK(!consumer_);
+    client_ = client;
+    decoder_ = TextResourceDecoder::Create(
+        TextResourceDecoderOptions::CreateAlwaysUseUTF8ForText());
+    consumer_ = consumer;
+    consumer_->SetClient(this);
+    OnStateChange();
+  }
+
+  void OnStateChange() override {
+    while (true) {
+      const char* buffer;
+      size_t available;
+      auto result = consumer_->BeginRead(&buffer, &available);
+      if (result == BytesConsumer::Result::kShouldWait)
+        return;
+      if (result == BytesConsumer::Result::kOk) {
+        if (available > 0)
+          builder_.Append(decoder_->Decode(buffer, available));
+        result = consumer_->EndRead(available);
+      }
+      switch (result) {
+        case BytesConsumer::Result::kOk:
+          break;
+        case BytesConsumer::Result::kShouldWait:
+          NOTREACHED();
+          return;
+        case BytesConsumer::Result::kDone:
+        {
+          builder_.Append(decoder_->Flush());
+          String ljson = builder_.ToString();
+          client_->DidFetchDataLoadedLabeledJson(ljson, origin_);
+          return;
+        }
+        case BytesConsumer::Result::kError:
+          client_->DidFetchDataLoadFailed();
+          return;
+      }
+    }
+  }
+
+  String DebugName() const override { return "FetchDataLoaderAsLabeledJson"; }
+
+  void Cancel() override { consumer_->Cancel(); }
+
+  void Trace(blink::Visitor* visitor) override {
+    visitor->Trace(consumer_);
+    visitor->Trace(client_);
+    FetchDataLoader::Trace(visitor);
+    BytesConsumer::Client::Trace(visitor);
+  }
+
+ private:
+  Member<BytesConsumer> consumer_;
+  Member<FetchDataLoader::Client> client_;
+
+  std::unique_ptr<TextResourceDecoder> decoder_;
+  StringBuilder builder_;
+
+  String mime_type_;
+  String origin_;
+};
+
 class FetchDataLoaderAsString final : public FetchDataLoader,
                                       public BytesConsumer::Client {
   USING_GARBAGE_COLLECTED_MIXIN(FetchDataLoaderAsString);
@@ -601,6 +676,11 @@ FetchDataLoader* FetchDataLoader::CreateLoaderAsFormData(
 
 FetchDataLoader* FetchDataLoader::CreateLoaderAsString() {
   return new FetchDataLoaderAsString();
+}
+
+FetchDataLoader* FetchDataLoader::CreateLoaderAsLabeledJson(
+    const String& mime_type, const String& origin) {
+  return new FetchDataLoaderAsLabeledJson(mime_type, origin);
 }
 
 FetchDataLoader* FetchDataLoader::CreateLoaderAsDataPipe(

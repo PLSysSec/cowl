@@ -96,6 +96,10 @@ class MODULES_EXPORT Response final : public Body {
   String MimeType() const override;
   String InternalMIMEType() const;
 
+  String Origin() const override {
+    return SecurityOrigin::CreateFromString(url())->ToString();
+  }
+
   const Vector<KURL>& InternalURLList() const;
 
   void Trace(blink::Visitor*) override;
