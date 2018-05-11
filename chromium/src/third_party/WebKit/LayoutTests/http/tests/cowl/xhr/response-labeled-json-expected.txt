@@ -1,4 +1,0 @@
-This is a testharness.js-based test.
-PASS Test XMLHttpRequest with responseType set to 'labeled-json' expecting success.
-Harness: the test ran to completion.
-
